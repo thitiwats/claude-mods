@@ -14,10 +14,16 @@ const installPrompt = (surface: string) =>
     ? `! ${INSTALL_COMMAND}`
     : `Install the /handoff skill by running this shell command: ${INSTALL_COMMAND}`
 
+// The reply is only the /handoff argument; it must stay one line because it is filled into the prompt.
 const SUGGEST_PROMPT = [
-  'The conversation so far is about to be handed off to a fresh session via /handoff.',
-  'Reply with ONE line (max 25 words, same language the user writes in) describing what the next session should focus on:',
-  'the unfinished task and its next concrete step. No preamble, no quotes, no markdown.',
+  'This conversation is about to be handed off via /handoff to a fresh agent that has no memory of it.',
+  'Your reply becomes the /handoff argument: it tells the handoff document what to focus on.',
+  "State, from this conversation only: the user's current goal (their latest intent, not superseded ones);",
+  'what is done and what is not; the exact next step; decisions or constraints the user set; approaches already ruled out.',
+  'Name concrete files, commands and identifiers. Do not guess: leave out anything the conversation does not establish,',
+  'and if the work is finished, say so instead of inventing a next step. Never include secrets.',
+  'Reply with ONE line, at most 60 words, in the language the user writes in, parts separated by semicolons.',
+  'No preamble, no quotes, no markdown.',
 ].join(' ')
 
 const IDLE: Suggestion = { status: 'idle' }
