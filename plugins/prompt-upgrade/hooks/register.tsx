@@ -14,6 +14,11 @@ const upgrade = atom({ plugin: 'prompt-upgrade', key: 'upgrade' } as const, null
 const IDLE = { status: 'idle' } as const
 const LOADING = { status: 'loading' } as const
 
+// Translated jargon reads oddly to developers writing in Thai and other languages, who keep it in English.
+const LANGUAGE =
+  'Write in the language the prompt is written in, the way a developer who speaks it writes: keep technical terms in English ' +
+  '(code identifiers, file names, commands, tools, libraries, and jargon such as commit, pull request, deploy, refactor, endpoint), never translated or transliterated.'
+
 const questionsPrompt = (original: string) =>
   [
     'The user wants to send the prompt below to you, and asked to improve it first.',
@@ -21,7 +26,7 @@ const questionsPrompt = (original: string) =>
     'ask none when the prompt is already clear or this conversation already answers it.',
     'Give each question 2 to 4 short options. Put first the option you judge most likely matches what the user means,',
     'given this conversation: it is shown to them as the recommended one.',
-    'Write questions and options in the language the prompt is written in.',
+    `Questions and options: ${LANGUAGE}`,
     'Reply with JSON only, no markdown: {"questions":[{"question":"...","options":["...","..."]}]}',
     '',
     '<prompt>',
@@ -34,7 +39,8 @@ const rewritePrompt = (original: string, answered: string) =>
     'Rewrite the user\'s prompt below into a clearer, more complete prompt for you, with the same intent.',
     'Add only what comes from the user\'s answers, from this conversation, or structure and output format.',
     'Never invent facts: write anything still unknown as a [placeholder].',
-    'Keep the language the prompt is written in. Keep it under 300 words; shorter is fine when the task is simple.',
+    LANGUAGE,
+    'Keep it under 300 words; shorter is fine when the task is simple.',
     'Also list each detail the rewrite states that the original did not, a few words each, in the same language.',
     'Reply with JSON only, no markdown: {"prompt":"...","added":["..."]}',
     '',
