@@ -2,8 +2,14 @@
 
 ## Git
 
-- Work only on the `dev` branch. Do not commit to, push to, or check out `main` or any other branch.
+- Develop on a branch cut from `main`, named `<mod>/<topic>` (e.g. `handoff-nudge/suggest-prompt`). Never commit or push to `main` directly; changes reach it only through a PR that the user merges.
 - Commit subject: `<mod>: <what changed>`; repo-wide changes use a plain sentence. The body says why, not what the diff already shows.
+
+### Dev-only tooling
+
+- Add whatever makes the change easy to test while developing, such as a preview command like `/handoff-nudge-preview`, test-only hooks, or README notes on using them.
+- Keep that tooling in its own commits, with subjects starting `<mod>: [dev-only]`, separate from the real change. Don't mix it into feature commits.
+- Once testing on both surfaces is done, revert every `[dev-only]` commit on the branch, then confirm nothing remains (`git diff main...HEAD` shows only the real change), re-run validate and test, and only then open the PR.
 
 ## Mods
 
