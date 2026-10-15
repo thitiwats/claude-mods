@@ -63,7 +63,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
     await run($, ORIGINAL)
 
     const pane = await mount($)
-    expect((await pane.find({ key: 'q0-0' }))?.text).toContain('(Recommended)')
+    expect((await pane.find({ key: 'q0-0' }))?.text).toContain('◉')
     await pane.press({ key: 'q1-1' })
     await pane.press({ key: 'upgrade' })
 

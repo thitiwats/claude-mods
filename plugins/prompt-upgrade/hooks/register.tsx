@@ -186,24 +186,36 @@ export const register: Register = on => {
     const { Box, Button, Text } = elements
     // Mobile draws no text field, so it offers no typed answer.
     const Input = 'Input' in elements ? elements.Input : undefined
-    const step =
-      u.rewrite.status === 'ready' ? 3 : u.rewrite.status !== 'idle' ? 2 : u.questions.status === 'ready' ? 1 : 0
-    const STEPS = ['Your prompt', 'Questions', 'Rewrite', 'Review']
+    const step = u.rewrite.status === 'ready' ? 2 : u.rewrite.status !== 'idle' ? 1 : 0
+    const STEPS = ['Questions', 'Rewrite', 'Review']
+
+    const stats = u.rewrite.status === 'ready' ? `${words(u.original)} → ${words(u.rewrite.value.text)} words · ${u.rewrite.value.added.length} added` : ''
 
     const steps = (
-      <Box columnGap={1} flexWrap="wrap">
-        {STEPS.map((name, i) => (
-          <Text key={name} color={i < step ? 'success' : i === step ? 'warning' : undefined} dimColor={i > step} bold={i === step}>
-            {i < step ? '✓' : i === step ? '●' : '○'} {name}
-            {i < STEPS.length - 1 ? ' ──' : ''}
-          </Text>
-        ))}
+      <Box columnGap={1} flexWrap="wrap" justifyContent="space-between">
+        <Box columnGap={1}>
+          {STEPS.map((name, i) => (
+            <Text key={name} color={i < step ? 'success' : i === step ? 'warning' : undefined} dimColor={i > step} bold={i === step}>
+              {name}
+              {i < STEPS.length - 1 ? ' ›' : ''}
+            </Text>
+          ))}
+        </Box>
+        <Text dimColor>{stats}</Text>
       </Box>
     )
 
-    const box = (title: string, text: string, color?: 'warning') => (
-      <Box flexDirection="column" borderStyle="round" borderColor={color} paddingX={1} flexGrow={1} flexShrink={1}>
-        <Text bold color={color}>
+    // One dim line instead of a box: the user just typed it.
+    const original = (
+      <Text wrap="truncate-end">
+        <Text dimColor>{u.rewrite.status === 'ready' ? 'Original  ' : 'Prompt  '}</Text>
+        {u.original.replace(/\s+/g, ' ')}
+      </Text>
+    )
+
+    const box = (title: string, text: string) => (
+      <Box flexDirection="column" borderStyle="round" borderColor="warning" paddingX={1}>
+        <Text bold color="warning">
           {title}
         </Text>
         <Text>{text}</Text>
@@ -213,6 +225,8 @@ export const register: Register = on => {
     const cancel = (
       <Button
         key="cancel"
+        plain
+        dimColor
         label="Cancel"
         onPress={async () => {
           await finish($)
@@ -223,6 +237,8 @@ export const register: Register = on => {
     const sendOriginal = (
       <Button
         key="original"
+        plain
+        dimColor
         label="Send original"
         onPress={async () => {
           await finish($)
@@ -233,7 +249,8 @@ export const register: Register = on => {
 
     const failure = (reason: string, retry: () => Promise<void>) => (
       <Box flexDirection="column" rowGap={1}>
-        <Text color="error">Could not upgrade the prompt: {reason}</Text>
+        {original}
+        <Text color="error">✗ Could not upgrade the prompt: {reason}</Text>
         <Box columnGap={1}>
           <Button key="retry" variant="primary" label="Retry" onPress={retry} />
           {sendOriginal}
@@ -249,17 +266,24 @@ export const register: Register = on => {
       body = failure(u.rewrite.reason, () => rewrite($, u.id))
     } else if (u.rewrite.status === 'ready') {
       const { text, added } = u.rewrite.value
-      const isWide = e.props.bodyColumns >= 80
       body = (
         <Box flexDirection="column" rowGap={1}>
-          <Text>
-            <Text dimColor>{words(u.original)} words → </Text>
-            <Text bold>{words(text)} words</Text>
-            <Text color="success">
-              {'   '}
-              {added.length} {added.length === 1 ? 'detail' : 'details'} added
-            </Text>
-          </Text>
+          {box('Upgraded prompt', text)}
+          {added.length > 0 && (
+            <Box flexDirection="column">
+              <Text dimColor bold>
+                Added
+              </Text>
+              {added.map((detail, i) => (
+                <Text key={`added-${i}`}>
+                  {'  '}
+                  <Text color="success">+ </Text>
+                  {detail}
+                </Text>
+              ))}
+            </Box>
+          )}
+          {original}
           <Box columnGap={1} flexWrap="wrap">
             <Button
               key="run"
@@ -289,33 +313,15 @@ export const register: Register = on => {
             {sendOriginal}
             {cancel}
           </Box>
-          {added.length > 0 && (
-            <Box flexDirection="column">
-              <Text dimColor bold>
-                WHAT I ADDED
-              </Text>
-              {added.map((detail, i) => (
-                <Text key={`added-${i}`}>
-                  <Text color="success">+ </Text>
-                  {detail}
-                </Text>
-              ))}
-            </Box>
-          )}
-          <Box flexDirection={isWide ? 'row' : 'column'} columnGap={1}>
-            {box('YOUR PROMPT', u.original)}
-            {box('+ UPGRADED', text, 'warning')}
-          </Box>
         </Box>
       )
     } else if (u.rewrite.status === 'loading') {
       body = (
         <Box flexDirection="column" rowGap={1}>
-          {box('YOUR PROMPT', u.original)}
+          {original}
           <Text bold>
-            <Text color="warning">◆</Text> Writing your upgraded prompt
+            <Text color="warning">◆</Text> Writing your upgraded prompt… <Text dimColor>(a few seconds)</Text>
           </Text>
-          <Text dimColor>This usually takes a few seconds.</Text>
           <Box>{cancel}</Box>
         </Box>
       )
@@ -325,9 +331,9 @@ export const register: Register = on => {
         update($, upgrade, x => (x?.id === u.id ? { ...x, answers: x.answers.map((a, j) => (j === i ? answer : a)) } : x))
       body = (
         <Box flexDirection="column" rowGap={1}>
-          {box('YOUR PROMPT', u.original)}
+          {original}
           <Text dimColor bold>
-            A FEW QUICK QUESTIONS <Text dimColor>· the recommended answer is picked; change any, or skip</Text>
+            Answer a few questions <Text dimColor>· recommended is picked; change any, or skip</Text>
           </Text>
           {questions.map((q, i) => {
             const a = u.answers[i]
@@ -336,24 +342,33 @@ export const register: Register = on => {
                 <Text bold>
                   <Text color="warning">{i + 1}</Text> {q.text}
                 </Text>
-                <Box columnGap={1} flexWrap="wrap" paddingLeft={2}>
+                <Box flexDirection="column" paddingLeft={2}>
                   {q.options.map((option, j) => (
-                    <Button
-                      key={`q${i}-${j}`}
-                      variant={a?.kind === 'option' && a.index === j ? 'primary' : undefined}
-                      label={j === 0 ? `${option} (Recommended)` : option}
-                      onPress={() => pick(i, { kind: 'option', index: j })}
-                    />
+                    <Box key={`o${j}`} columnGap={1}>
+                      <Button
+                        key={`q${i}-${j}`}
+                        plain
+                        label={`${a?.kind === 'option' && a.index === j ? '◉' : '○'} ${option}`}
+                        onPress={() => pick(i, { kind: 'option', index: j })}
+                      />
+                      {j === 0 && <Text dimColor>recommended</Text>}
+                    </Box>
                   ))}
                   {Input && (
                     <Button
                       key={`q${i}-other`}
-                      variant={a?.kind === 'other' ? 'primary' : undefined}
-                      label="Other (type it)"
+                      plain
+                      label={`${a?.kind === 'other' ? '◉' : '○'} Other…`}
                       onPress={() => pick(i, { kind: 'other', text: a?.kind === 'other' ? a.text : '' })}
                     />
                   )}
-                  <Button key={`q${i}-skip`} variant={a?.kind === 'skip' ? 'primary' : undefined} label="Skip" onPress={() => pick(i, { kind: 'skip' })} />
+                  <Button
+                    key={`q${i}-skip`}
+                    plain
+                    dimColor
+                    label={`${a?.kind === 'skip' ? '◉' : '○'} Skip`}
+                    onPress={() => pick(i, { kind: 'skip' })}
+                  />
                 </Box>
                 {Input && a?.kind === 'other' && (
                   <Box paddingLeft={2}>
@@ -379,7 +394,7 @@ export const register: Register = on => {
     } else {
       body = (
         <Box flexDirection="column" rowGap={1}>
-          {box('YOUR PROMPT', u.original)}
+          {original}
           <Text dimColor>Reading your prompt…</Text>
           <Box>{cancel}</Box>
         </Box>
