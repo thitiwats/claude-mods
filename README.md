@@ -1,6 +1,6 @@
 # claude-mods
 
-Personal Claude Code mods, published as a plugin marketplace.
+Claude Code mods, published as a plugin marketplace.
 
 ## Mods
 
@@ -20,16 +20,22 @@ Answer `y` to add the marketplace, then pick a scope.
 
 ## Develop
 
-Add this folder as a local marketplace so edits apply after `/reload-plugins`:
+Clone the repo and add it as a local marketplace so edits apply after `/reload-plugins`:
 
 ```sh
-claude plugin marketplace add ~/Workspaces/claude-mods
+git clone https://github.com/thitiwats/claude-mods.git
+claude plugin marketplace add ./claude-mods
 claude plugin install handoff-nudge@claude-mods --scope user
 ```
 
 Check a mod:
 
 ```sh
+cd claude-mods
 claude plugin validate plugins/handoff-nudge
 claude plugin test plugins/handoff-nudge
 ```
+
+## License
+
+[MIT](LICENSE)
