@@ -57,6 +57,33 @@ for (const surface of ['terminal', 'desktop'] as const) {
     expect(drawn).toContain(surface === 'desktop' ? '"type":"Svg"' : '"▰▰▰▰"')
   })
 
+  test(`${surface}: /handoff-nudge-preview shows the band under the threshold and toggles off`, async ($, on) => {
+    on('session.measure', (_$, e) => ({ changed: e.changed }))
+    on('ui.render', () => ({ type: 'Box', props: { key: 'engine' }, children: [] }))
+    on('command.list', () => ({ value: [HANDOFF] }))
+
+    await $.session.measure(measure(50_000))
+    expect(await (await mount($)).find({ key: 'suggest' })).toBeUndefined()
+
+    await $.command.run({ command: 'handoff-nudge-preview', args: '' })
+    expect(await (await mount($)).find({ key: 'suggest' })).toBeDefined()
+
+    await $.command.run({ command: 'handoff-nudge-preview', args: '' })
+    expect(await (await mount($)).find({ key: 'suggest' })).toBeUndefined()
+  })
+
+  test(`${surface}: /handoff-nudge-preview install shows the install button`, async ($, on) => {
+    on('session.measure', (_$, e) => ({ changed: e.changed }))
+    on('ui.render', () => ({ type: 'Box', props: { key: 'engine' }, children: [] }))
+    on('command.list', () => ({ value: [HANDOFF] }))
+
+    await $.session.measure(measure(50_000))
+    await $.command.run({ command: 'handoff-nudge-preview', args: 'install' })
+    const ui = await mount($)
+    expect(await ui.find({ key: 'install' })).toBeDefined()
+    expect(await ui.find({ key: 'suggest' })).toBeUndefined()
+  })
+
   test(`${surface}: missing /handoff fills the skills.sh install: a ! line on the terminal, a request to Claude on desktop`, async ($, on) => {
     const filled: string[] = []
     on('session.measure', (_$, e) => ({ changed: e.changed }))

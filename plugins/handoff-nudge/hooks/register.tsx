@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { Register, RenderChildren } from 'claude-code'
 
-import type { Suggestion } from '../types'
+import type { Preview, Suggestion } from '../types'
 
 const THRESHOLD = 200_000
 
@@ -54,8 +54,29 @@ const contextWindow = atom({ plugin: 'handoff-nudge', key: 'window' } as const, 
 const isHidden = atom({ plugin: 'handoff-nudge', key: 'isHidden' } as const, false)
 const suggestion = atom({ plugin: 'handoff-nudge', key: 'suggestion' } as const, IDLE)
 const hasHandoff = atom({ plugin: 'handoff-nudge', key: 'hasHandoff' } as const, true)
+const preview = atom({ plugin: 'handoff-nudge', key: 'preview' } as const, 'off')
 
 export const register: Register = on => {
+  on('session.start', async ($, e, next) => {
+    await $.command.register({
+      name: 'handoff-nudge-preview',
+      description: 'Toggle the handoff band on regardless of context size; "install" shows it as if /handoff were missing',
+      argumentHint: '[install]',
+    })
+
+    return next(e)
+  })
+
+  // Shows the band under the threshold too, so its design can be checked in any session.
+  on('command.run', { command: 'handoff-nudge-preview' }, async ($, e) => {
+    const asked: Preview = e.args.trim() === 'install' ? 'install' : 'band'
+    const mode = await update($, preview, was => (was === asked ? 'off' : asked))
+    await update($, isHidden, () => false)
+
+    const text = { off: 'Handoff band preview off.', band: 'Handoff band preview on.', install: 'Handoff band preview on, as if /handoff were missing.' }
+    return { text: text[mode] }
+  })
+
   on('session.measure', async ($, e, next) => {
     const current = e.context.tokens ?? null
     await update($, tokens, () => current)
@@ -76,9 +97,14 @@ export const register: Register = on => {
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     // Keep what Claude Code and other mods draw here; the card goes below it.
     const rest = await next(e)
-    const current = await read($, tokens)
+    const measured = await read($, tokens)
+    const mode = await read($, preview)
+    const current = mode !== 'off' ? (measured ?? 0) : measured
     const isQuiet =
-      e.props.hasSurvey || current === null || current < THRESHOLD || (await read($, isHidden))
+      e.props.hasSurvey ||
+      current === null ||
+      (current < THRESHOLD && mode === 'off') ||
+      (await read($, isHidden))
 
     if (isQuiet) {
       return rest
@@ -87,7 +113,7 @@ export const register: Register = on => {
     const { Box, Button, Text } = $.ui.resolve(e)
     const window = await read($, contextWindow)
     const s = await read($, suggestion)
-    const isMissing = !(await read($, hasHandoff))
+    const isMissing = mode === 'install' || !(await read($, hasHandoff))
     const percent = window > 0 ? Math.round((current / window) * 100) : undefined
     const { filled, empty } = bar(current, window)
 

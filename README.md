@@ -36,6 +36,8 @@ claude plugin validate plugins/handoff-nudge
 claude plugin test plugins/handoff-nudge
 ```
 
+To see the handoff-nudge band without reaching 200k tokens, run `/handoff-nudge-preview` in a session (terminal or the desktop app's Code tab); run it again to turn the preview off. `/handoff-nudge-preview install` shows the band as if `/handoff` were not installed, to check the **Install /handoff** button.
+
 ## License
 
 [MIT](LICENSE)
