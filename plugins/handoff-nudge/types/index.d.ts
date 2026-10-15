@@ -14,6 +14,7 @@ declare module 'claude-code' {
   interface PluginState {
     'handoff-nudge': {
       tokens: Tokens
+      threshold: number
       window: number
       isHidden: boolean
       suggestion: Suggestion

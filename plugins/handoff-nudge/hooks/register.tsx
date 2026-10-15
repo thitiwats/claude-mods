@@ -3,7 +3,12 @@ import type { Register, RenderChildren } from 'claude-code'
 
 import type { Handoff, Suggestion } from '../types'
 
-const THRESHOLD = 200_000
+// Room left below auto-compaction or a full window, so the band shows while there is still time to hand off.
+const HEADROOM = 0.9
+
+// What the band compares the context to: the chosen threshold, pulled below where compaction runs or the window ends.
+const effectiveThreshold = (chosen: number, window: number, autoCompactAt: number | undefined) =>
+  Math.floor(Math.min(chosen, ...[window, autoCompactAt ?? 0].filter(n => n > 0).map(n => n * HEADROOM)))
 
 const HANDOFFS_KEY = 'handoffs'
 const MAX_KEPT = 20
@@ -17,6 +22,14 @@ const isHandoffDoc = (path: string, tmpdir: string | undefined) =>
   /handoff/i.test(path) &&
   path.endsWith('.md') &&
   [...TMP_ROOTS, ...(tmpdir ? [tmpdir.endsWith('/') ? tmpdir : `${tmpdir}/`] : [])].some(root => path.startsWith(root))
+
+const isUnder = (path: string, folder: string) => path.startsWith(folder.endsWith('/') ? folder : `${folder}/`)
+
+// A doc written in a subfolder of this project, or above it, still belongs here; home and / hold every project, so they never count.
+const isNearby = (docCwd: string, cwd: string, home: string | undefined) => {
+  const isRoot = (folder: string) => folder === '/' || folder === home
+  return docCwd === cwd || (isUnder(cwd, docCwd) && !isRoot(docCwd)) || (isUnder(docCwd, cwd) && !isRoot(cwd))
+}
 
 const asHandoffs = (value: unknown) => (Array.isArray(value) ? (value as Handoff[]) : [])
 
@@ -80,6 +93,7 @@ const barSvg = (current: number, window: number) => {
 const formatK = (n: number) => (n >= 1_000_000 ? `${n / 1_000_000}M` : `${Math.round(n / 1000)}k`)
 
 const tokens = atom({ plugin: 'handoff-nudge', key: 'tokens' } as const, null)
+const threshold = atom({ plugin: 'handoff-nudge', key: 'threshold' } as const, 0)
 const contextWindow = atom({ plugin: 'handoff-nudge', key: 'window' } as const, 0)
 const isHidden = atom({ plugin: 'handoff-nudge', key: 'isHidden' } as const, false)
 const suggestion = atom({ plugin: 'handoff-nudge', key: 'suggestion' } as const, IDLE)
@@ -87,7 +101,8 @@ const hasHandoff = atom({ plugin: 'handoff-nudge', key: 'hasHandoff' } as const,
 const isResumeHidden = atom({ plugin: 'handoff-nudge', key: 'isResumeHidden' } as const, false)
 const isConversationEmpty = atom({ plugin: 'handoff-nudge', key: 'isConversationEmpty' } as const, true)
 
-export const register: Register = on => {
+export const register: Register = (on, options) => {
+  const chosen = Number.parseInt(String(options.nudgeThreshold), 10) * 1000
   // Remember each handoff doc this session writes, so the next session in this cwd can offer it.
   on('tool.call', { tool: 'Write' }, async ($, e, next) => {
     const ran = await next(e)
@@ -143,8 +158,9 @@ export const register: Register = on => {
 
     const cwd = await $.session.cwd()
     const now = await $.clock.now()
+    const home = await $.env.get('HOME')
     const candidates = asHandoffs(await $.store.get(HANDOFFS_KEY)).filter(
-      doc => doc.cwd === cwd && !doc.isResumed && now - doc.at < MAX_AGE_MS,
+      doc => isNearby(doc.cwd, cwd, home) && !doc.isResumed && now - doc.at < MAX_AGE_MS,
     )
     const shown: Handoff[] = []
     for (const doc of candidates) {
@@ -195,9 +211,13 @@ export const register: Register = on => {
     const current = e.context.tokens ?? null
     await update($, tokens, () => current)
     await update($, contextWindow, () => e.context.window)
+    // Only the breakdown says where auto-compaction runs; `summary` counts locally, sending nothing.
+    const { context } = await $.session.usage({ breakdown: 'summary' })
+    const at = effectiveThreshold(chosen, e.context.window, context.breakdown?.autoCompactThreshold)
+    await update($, threshold, () => at)
 
     // Re-arm the band once context drops back under the threshold (compact, /clear).
-    if (current === null || current < THRESHOLD) {
+    if (current === null || current < at) {
       await update($, isHidden, () => false)
       await update($, suggestion, () => IDLE)
     } else {
@@ -213,7 +233,7 @@ export const register: Register = on => {
     const rest = await next(e)
     const current = await read($, tokens)
     const isQuiet =
-      e.props.hasSurvey || current === null || current < THRESHOLD || (await read($, isHidden))
+      e.props.hasSurvey || current === null || current < (await read($, threshold)) || (await read($, isHidden))
 
     if (isQuiet) {
       return rest

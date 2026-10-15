@@ -12,16 +12,17 @@ const PROPS = {
 }
 
 const TMPDIR = '/var/folders/2b/abc/T/'
+const HOME = '/w'
 const DOC = `${TMPDIR}handoff-erp-structure.md`
 const HOUR = 60 * 60 * 1000
 const DAY = 24 * HOUR
 
 // The world a fresh session in /w/app sees: an empty conversation, every file present, Write succeeding.
-const world = (on: On, opts: { turns?: number; isPresent?: boolean; store?: Record<string, unknown> } = {}) => {
+const world = (on: On, opts: { cwd?: string; turns?: number; isPresent?: boolean; store?: Record<string, unknown> } = {}) => {
   mock.store(on, opts.store)
-  mock.env(on, { TMPDIR })
+  mock.env(on, { TMPDIR, HOME })
   on('ui.render', () => ({ type: 'Box', props: { key: 'engine' }, children: [] }))
-  on('session.cwd', () => ({ value: '/w/app' }))
+  on('session.cwd', () => ({ value: opts.cwd ?? '/w/app' }))
   on('session.turns', () => ({ value: opts.turns ?? 0 }))
   on('fs.exists', () => ({ value: opts.isPresent ?? true }))
   on('tool.call', () => ({ result: { type: 'create', filePath: DOC, content: '', structuredPatch: [] } }) as never)
@@ -88,6 +89,26 @@ for (const surface of ['terminal', 'desktop'] as const) {
 
   test(`${surface}: a handoff from another project is not offered`, async ($, on) => {
     world(on, { store: { handoffs: [{ path: DOC, cwd: '/w/other', at: 100 * DAY }] } })
+    expect(await (await mount($)).find({ key: 'resume-0' })).toBeUndefined()
+  })
+
+  test(`${surface}: a handoff written in a subfolder is offered at the project root`, async ($, on) => {
+    world(on, { store: { handoffs: [{ path: DOC, cwd: '/w/app/web', at: 100 * DAY }] } })
+    expect(await (await mount($)).find({ key: 'resume-0' })).toBeDefined()
+  })
+
+  test(`${surface}: a handoff written at the project root is offered in a subfolder`, async ($, on) => {
+    world(on, { cwd: '/w/app/web', store: { handoffs: [{ path: DOC, cwd: '/w/app', at: 100 * DAY }] } })
+    expect(await (await mount($)).find({ key: 'resume-0' })).toBeDefined()
+  })
+
+  test(`${surface}: a handoff written in the home folder or / is not offered in a project, nor one from a project in home`, async ($, on) => {
+    world(on, { store: { handoffs: [{ path: DOC, cwd: HOME, at: 100 * DAY }, { path: `${TMPDIR}handoff-b.md`, cwd: '/', at: 100 * DAY }] } })
+    expect(await (await mount($)).find({ key: 'resume-0' })).toBeUndefined()
+  })
+
+  test(`${surface}: a handoff from a project is not offered in the home folder`, async ($, on) => {
+    world(on, { cwd: HOME, store: { handoffs: [{ path: DOC, cwd: '/w/app', at: 100 * DAY }] } })
     expect(await (await mount($)).find({ key: 'resume-0' })).toBeUndefined()
   })
 

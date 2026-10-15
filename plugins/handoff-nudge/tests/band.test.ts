@@ -14,10 +14,15 @@ const USAGE = { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, c
 
 const HANDOFF = { name: 'handoff', description: '', source: 'user' as const }
 
-const measure = (tokens: number) => ({
-  context: { tokens, window: 1_000_000 },
+const measure = (tokens: number, window = 1_000_000) => ({
+  context: { tokens, window },
   rateLimits: [],
   changed: ['context' as const],
+})
+
+// Answers $.session.usage with where auto-compaction runs; undefined when it is off.
+const usage = (autoCompactThreshold?: number) => () => ({
+  value: { startedAt: 0, context: { window: 0, breakdown: { autoCompactThreshold } }, rateLimits: [] } as never,
 })
 
 for (const surface of ['terminal', 'desktop'] as const) {
@@ -26,6 +31,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
 
   test(`${surface}: hidden under 200k, shown past it, hide re-arms after compaction`, async ($, on) => {
     on('session.measure', (_$, e) => ({ changed: e.changed }))
+    on('session.usage', usage())
     on('ui.render', () => ({ type: 'Box', props: { key: 'engine' }, children: [] }))
     mock.store(on)
     on('prompt.submit', (_$, e) => ({ text: e.text }))
@@ -50,6 +56,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
 
   test(`${surface}: card shows the context fill against the window`, async ($, on) => {
     on('session.measure', (_$, e) => ({ changed: e.changed }))
+    on('session.usage', usage())
     on('ui.render', () => ({ type: 'Box', props: { key: 'engine' }, children: [] }))
     mock.store(on)
     on('prompt.submit', (_$, e) => ({ text: e.text }))
@@ -66,6 +73,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
   test(`${surface}: missing /handoff fills the skills.sh install: a ! line on the terminal, a request to Claude on desktop`, async ($, on) => {
     const filled: string[] = []
     on('session.measure', (_$, e) => ({ changed: e.changed }))
+    on('session.usage', usage())
     on('ui.render', () => ({ type: 'Box', props: { key: 'engine' }, children: [] }))
     mock.store(on)
     on('prompt.submit', (_$, e) => ({ text: e.text }))
@@ -87,6 +95,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
   test(`${surface}: suggest forks the transcript and fills /handoff with the focus`, async ($, on) => {
     const filled: string[] = []
     on('session.measure', (_$, e) => ({ changed: e.changed }))
+    on('session.usage', usage())
     on('ui.render', () => ({ type: 'Box', props: { key: 'engine' }, children: [] }))
     mock.store(on)
     on('prompt.submit', (_$, e) => ({ text: e.text }))
@@ -104,5 +113,50 @@ for (const surface of ['terminal', 'desktop'] as const) {
     expect(filled).toEqual(['/handoff Finish the mod install'])
     const after = await mount($)
     expect(JSON.stringify(await after.drawn())).not.toContain('Finish the mod install')
+  })
+
+  test(`${surface}: a 300k nudge threshold stays hidden at 250k and shows past 300k`, { options: { nudgeThreshold: '300k' } }, async ($, on) => {
+    on('session.measure', (_$, e) => ({ changed: e.changed }))
+    on('session.usage', usage())
+    on('ui.render', () => ({ type: 'Box', props: { key: 'engine' }, children: [] }))
+    mock.store(on)
+    on('prompt.submit', (_$, e) => ({ text: e.text }))
+    on('command.list', () => ({ value: [HANDOFF] }))
+
+    await $.prompt.submit({ text: 'hi' } as never)
+    await $.session.measure(measure(250_000))
+    expect(await (await mount($)).find({ key: 'suggest' })).toBeUndefined()
+    await $.session.measure(measure(310_000))
+    expect(await (await mount($)).find({ key: 'suggest' })).toBeDefined()
+  })
+
+  test(`${surface}: shows before auto-compaction when the threshold sits past it`, async ($, on) => {
+    on('session.measure', (_$, e) => ({ changed: e.changed }))
+    on('session.usage', usage(167_000))
+    on('ui.render', () => ({ type: 'Box', props: { key: 'engine' }, children: [] }))
+    mock.store(on)
+    on('prompt.submit', (_$, e) => ({ text: e.text }))
+    on('command.list', () => ({ value: [HANDOFF] }))
+
+    await $.prompt.submit({ text: 'hi' } as never)
+    await $.session.measure(measure(140_000, 200_000))
+    expect(await (await mount($)).find({ key: 'suggest' })).toBeUndefined()
+    await $.session.measure(measure(155_000, 200_000))
+    expect(await (await mount($)).find({ key: 'suggest' })).toBeDefined()
+  })
+
+  test(`${surface}: shows before the window fills when auto-compaction is off`, { options: { nudgeThreshold: '300k' } }, async ($, on) => {
+    on('session.measure', (_$, e) => ({ changed: e.changed }))
+    on('session.usage', usage())
+    on('ui.render', () => ({ type: 'Box', props: { key: 'engine' }, children: [] }))
+    mock.store(on)
+    on('prompt.submit', (_$, e) => ({ text: e.text }))
+    on('command.list', () => ({ value: [HANDOFF] }))
+
+    await $.prompt.submit({ text: 'hi' } as never)
+    await $.session.measure(measure(170_000, 200_000))
+    expect(await (await mount($)).find({ key: 'suggest' })).toBeUndefined()
+    await $.session.measure(measure(185_000, 200_000))
+    expect(await (await mount($)).find({ key: 'suggest' })).toBeDefined()
   })
 }
