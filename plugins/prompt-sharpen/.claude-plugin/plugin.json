@@ -1,6 +1,6 @@
 {
   "name": "prompt-sharpen",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "/prompt-sharpen <prompt> opens a pane that asks a few clarifying questions with recommended answers, then rewrites the prompt clearer and more complete with the same intent, to run, edit or copy",
   "types": "./types/index.d.ts"
 }

@@ -354,7 +354,7 @@ export const register: Register = on => {
                 </Text>
                 <Box flexDirection="column" paddingLeft={2}>
                   {q.options.map((option, j) => (
-                    <Box key={`o${j}`} columnGap={1}>
+                    <Box key={`o${j}`} columnGap={1} flexWrap="wrap">
                       <Button
                         key={`q${i}-${j}`}
                         plain
