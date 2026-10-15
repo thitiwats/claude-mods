@@ -20,6 +20,12 @@ const isHandoffDoc = (path: string, tmpdir: string | undefined) =>
 
 const asHandoffs = (value: unknown) => (Array.isArray(value) ? (value as Handoff[]) : [])
 
+// Returns the list with matching docs marked resumed, or undefined when none changed.
+const markResumed = (all: Handoff[], isMatch: (path: string) => boolean) =>
+  all.some(doc => !doc.isResumed && isMatch(doc.path))
+    ? all.map(doc => (isMatch(doc.path) ? { ...doc, isResumed: true } : doc))
+    : undefined
+
 const formatAge = (ms: number) => {
   const minutes = Math.max(1, Math.round(ms / 60_000))
   if (minutes < 60) return `${minutes}m ago`
@@ -94,8 +100,21 @@ export const register: Register = on => {
     return ran
   })
 
+  // A doc counts as resumed once Claude reads it, however its path got into the prompt.
+  on('tool.call', { tool: 'Read' }, async ($, e, next) => {
+    const ran = await next(e)
+    if (ran.deny === undefined && ran.isError !== true) {
+      const marked = markResumed(asHandoffs(await $.store.get(HANDOFFS_KEY)), path => path === e.file_path)
+      if (marked) await $.store.set(HANDOFFS_KEY, marked)
+    }
+    return ran
+  })
+
   // Re-arm the resume band for the next empty conversation (/clear keeps this session's state).
   on('prompt.submit', async ($, e, next) => {
+    // Pressing Resume only fills the prompt; the doc counts as resumed once that prompt is sent.
+    const marked = markResumed(asHandoffs(await $.store.get(HANDOFFS_KEY)), path => e.text.includes(path))
+    if (marked) await $.store.set(HANDOFFS_KEY, marked)
     await update($, isResumeHidden, () => false)
     await update($, isConversationEmpty, () => false)
     return next(e)
@@ -144,8 +163,6 @@ export const register: Register = on => {
         : ({ borderStyle: 'round', borderColor: 'suggestion', paddingX: 1 } as const)
 
     const resume = async (doc: Handoff) => {
-      const all = asHandoffs(await $.store.get(HANDOFFS_KEY))
-      await $.store.set(HANDOFFS_KEY, all.map(x => (x.path === doc.path ? { ...x, isResumed: true } : x)))
       await update($, isResumeHidden, () => true)
       // Trailing space: the user usually adds what to do next after the path.
       await $.prompt.fill({ text: `${doc.path} ` })

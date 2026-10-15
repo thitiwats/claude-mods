@@ -1,4 +1,4 @@
-import { expect, test } from 'claude-code/testing'
+import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 
 const PROPS = {
@@ -27,6 +27,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
   test(`${surface}: hidden under 200k, shown past it, hide re-arms after compaction`, async ($, on) => {
     on('session.measure', (_$, e) => ({ changed: e.changed }))
     on('ui.render', () => ({ type: 'Box', props: { key: 'engine' }, children: [] }))
+    mock.store(on)
     on('prompt.submit', (_$, e) => ({ text: e.text }))
     on('command.list', () => ({ value: [HANDOFF] }))
 
@@ -50,6 +51,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
   test(`${surface}: card shows the context fill against the window`, async ($, on) => {
     on('session.measure', (_$, e) => ({ changed: e.changed }))
     on('ui.render', () => ({ type: 'Box', props: { key: 'engine' }, children: [] }))
+    mock.store(on)
     on('prompt.submit', (_$, e) => ({ text: e.text }))
     on('command.list', () => ({ value: [HANDOFF] }))
 
@@ -65,6 +67,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
     const filled: string[] = []
     on('session.measure', (_$, e) => ({ changed: e.changed }))
     on('ui.render', () => ({ type: 'Box', props: { key: 'engine' }, children: [] }))
+    mock.store(on)
     on('prompt.submit', (_$, e) => ({ text: e.text }))
     on('command.list', () => ({ value: [] }))
     on('prompt.fill', (_$, e) => (filled.push(e.text), { isFilled: true }))
@@ -85,6 +88,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
     const filled: string[] = []
     on('session.measure', (_$, e) => ({ changed: e.changed }))
     on('ui.render', () => ({ type: 'Box', props: { key: 'engine' }, children: [] }))
+    mock.store(on)
     on('prompt.submit', (_$, e) => ({ text: e.text }))
     on('command.list', () => ({ value: [HANDOFF] }))
     on('model.fork', () => ({

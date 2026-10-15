@@ -96,6 +96,40 @@ for (const surface of ['terminal', 'desktop'] as const) {
     expect(await (await mount($)).find({ key: 'resume-0' })).toBeUndefined()
   })
 
+  // /clear re-arms the band in the same session, so it shows what the store now says.
+  const clear = ($: Engine) => $.session.end({ reason: 'clear' } as never)
+
+  test(`${surface}: a handoff whose path was sent is not offered again`, async ($, on) => {
+    world(on, { turns: 1 })
+    on('prompt.submit', (_$, e) => ({ text: e.text }))
+    on('session.end', () => ({ sessionId: 's' }))
+    await $.tool.call({ tool: 'Write', file_path: DOC, content: '' })
+    await $.prompt.submit({ text: `${DOC} continue the plan` } as never)
+    await clear($)
+    expect(await (await mount($)).find({ key: 'resume-0' })).toBeUndefined()
+  })
+
+  test(`${surface}: a handoff Claude read is not offered again`, async ($, on) => {
+    world(on, { turns: 1 })
+    on('session.end', () => ({ sessionId: 's' }))
+    await $.tool.call({ tool: 'Write', file_path: DOC, content: '' })
+    await $.tool.call({ tool: 'Read', file_path: DOC })
+    await clear($)
+    expect(await (await mount($)).find({ key: 'resume-0' })).toBeUndefined()
+  })
+
+  test(`${surface}: pressing Resume, then sending something else, keeps the handoff on offer`, async ($, on) => {
+    world(on, { turns: 1 })
+    on('prompt.fill', () => ({ isFilled: true }))
+    on('prompt.submit', (_$, e) => ({ text: e.text }))
+    on('session.end', () => ({ sessionId: 's' }))
+    await $.tool.call({ tool: 'Write', file_path: DOC, content: '' })
+    await (await mount($)).press({ key: 'resume-0' })
+    await $.prompt.submit({ text: 'something else' } as never)
+    await clear($)
+    expect(await (await mount($)).find({ key: 'resume-0' })).toBeDefined()
+  })
+
   test(`${surface}: hide dismisses the band until the next prompt`, async ($, on) => {
     world(on)
     await $.tool.call({ tool: 'Write', file_path: DOC, content: '' })
