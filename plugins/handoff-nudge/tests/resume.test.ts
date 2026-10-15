@@ -1,0 +1,95 @@
+import { expect, mock, test } from 'claude-code/testing'
+import type { On } from 'claude-code'
+import type { Engine } from 'claude-code/testing'
+
+const PROPS = {
+  hasSurvey: false,
+  isWorking: false,
+  maxRows: 10,
+  bodyColumns: 120,
+  scroll: { offset: 0, bodyRows: 9 },
+  view: {},
+}
+
+const TMPDIR = '/var/folders/2b/abc/T/'
+const DOC = `${TMPDIR}handoff-erp-structure.md`
+const HOUR = 60 * 60 * 1000
+const DAY = 24 * HOUR
+
+// The world a fresh session in /w/app sees: an empty conversation, every file present, Write succeeding.
+const world = (on: On, opts: { turns?: number; isPresent?: boolean; store?: Record<string, unknown> } = {}) => {
+  mock.store(on, opts.store)
+  mock.env(on, { TMPDIR })
+  on('ui.render', () => ({ type: 'Box', props: { key: 'engine' }, children: [] }))
+  on('session.cwd', () => ({ value: '/w/app' }))
+  on('session.turns', () => ({ value: opts.turns ?? 0 }))
+  on('fs.exists', () => ({ value: opts.isPresent ?? true }))
+  on('tool.call', () => ({ result: { type: 'create', filePath: DOC, content: '', structuredPatch: [] } }) as never)
+  return mock.clock(on, { now: 100 * DAY })
+}
+
+for (const surface of ['terminal', 'desktop'] as const) {
+  const mount = ($: Engine) =>
+    $.ui.mount({ plugin: 'handoff-nudge', surface, component: 'AbovePrompt', props: PROPS })
+
+  test(`${surface}: a handoff written here is offered in an empty conversation, and Resume fills its path`, async ($, on) => {
+    const filled: string[] = []
+    const clock = world(on)
+    on('prompt.fill', (_$, e) => (filled.push(e.text), { isFilled: true }))
+
+    expect(await (await mount($)).find({ key: 'resume-0' })).toBeUndefined()
+
+    await $.tool.call({ tool: 'Write', file_path: DOC, content: '# Handoff' })
+    await clock.advance(2 * HOUR)
+    const ui = await mount($)
+    expect(JSON.stringify(await ui.drawn())).toContain('2h ago')
+    await ui.press({ key: 'resume-0' })
+
+    expect(filled).toEqual([`${DOC} `])
+    expect(await (await mount($)).find({ key: 'resume-0' })).toBeUndefined()
+  })
+
+  test(`${surface}: writes outside the temp dir or not named handoff are not offered`, async ($, on) => {
+    world(on)
+    await $.tool.call({ tool: 'Write', file_path: '/w/app/docs/handoff.md', content: '' })
+    await $.tool.call({ tool: 'Write', file_path: `${TMPDIR}notes.md`, content: '' })
+    expect(await (await mount($)).find({ key: 'resume-0' })).toBeUndefined()
+  })
+
+  test(`${surface}: hidden once the conversation has turns`, async ($, on) => {
+    world(on, { turns: 1 })
+    await $.tool.call({ tool: 'Write', file_path: DOC, content: '' })
+    expect(await (await mount($)).find({ key: 'resume-0' })).toBeUndefined()
+  })
+
+  test(`${surface}: hidden when the doc is gone`, async ($, on) => {
+    world(on, { isPresent: false })
+    await $.tool.call({ tool: 'Write', file_path: DOC, content: '' })
+    expect(await (await mount($)).find({ key: 'resume-0' })).toBeUndefined()
+  })
+
+  test(`${surface}: hidden once the doc is older than a week`, async ($, on) => {
+    const clock = world(on)
+    await $.tool.call({ tool: 'Write', file_path: DOC, content: '' })
+    await clock.advance(8 * DAY)
+    expect(await (await mount($)).find({ key: 'resume-0' })).toBeUndefined()
+  })
+
+  test(`${surface}: a handoff from another project is not offered`, async ($, on) => {
+    world(on, { store: { handoffs: [{ path: DOC, cwd: '/w/other', at: 100 * DAY }] } })
+    expect(await (await mount($)).find({ key: 'resume-0' })).toBeUndefined()
+  })
+
+  test(`${surface}: a resumed handoff is not offered again`, async ($, on) => {
+    world(on, { store: { handoffs: [{ path: DOC, cwd: '/w/app', at: 100 * DAY, isResumed: true }] } })
+    expect(await (await mount($)).find({ key: 'resume-0' })).toBeUndefined()
+  })
+
+  test(`${surface}: hide dismisses the band until the next prompt`, async ($, on) => {
+    world(on)
+    await $.tool.call({ tool: 'Write', file_path: DOC, content: '' })
+    const ui = await mount($)
+    await ui.press({ key: 'resume-hide' })
+    expect(await (await mount($)).find({ key: 'resume-0' })).toBeUndefined()
+  })
+}

@@ -1,0 +1,216 @@
+import { atom, read, update } from 'claude-code';
+const THRESHOLD = 200000;
+const HANDOFFS_KEY = 'handoffs';
+const MAX_KEPT = 20;
+const MAX_SHOWN = 3;
+const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+// /handoff saves to $TMPDIR (else /tmp); macOS resolves /tmp through /private/tmp.
+const TMP_ROOTS = ['/tmp/', '/private/tmp/'];
+const isHandoffDoc = (path, tmpdir) => /handoff/i.test(path) &&
+    path.endsWith('.md') &&
+    [...TMP_ROOTS, ...(tmpdir ? [tmpdir.endsWith('/') ? tmpdir : `${tmpdir}/`] : [])].some(root => path.startsWith(root));
+const readHandoffs = async (store) => {
+    const value = await store.get(HANDOFFS_KEY);
+    return Array.isArray(value) ? value : [];
+};
+const formatAge = (ms) => {
+    const minutes = Math.max(1, Math.round(ms / 60000));
+    if (minutes < 60)
+        return `${minutes}m ago`;
+    const hours = Math.round(minutes / 60);
+    return hours < 48 ? `${hours}h ago` : `${Math.round(hours / 24)}d ago`;
+};
+const basename = (path) => path.split('/').filter(Boolean).slice(-2).join('/');
+// Installs /handoff from skills.sh when it is missing: `universal` keeps the files in ~/.agents/skills and symlinks Claude Code's copy to them.
+const INSTALL_COMMAND = 'npx -y skills add mattpocock/skills -s handoff -g -a universal claude-code -y';
+// The terminal runs a `!` line as shell; the desktop app sends it to Claude as a message, so ask Claude there.
+const installPrompt = (surface) => surface === 'terminal'
+    ? `! ${INSTALL_COMMAND}`
+    : `Install the /handoff skill by running this shell command: ${INSTALL_COMMAND}`;
+// The reply is only the /handoff argument; it must stay one line because it is filled into the prompt.
+const SUGGEST_PROMPT = [
+    'This conversation is about to be handed off via /handoff to a fresh agent that has no memory of it.',
+    'Your reply becomes the /handoff argument: it tells the handoff document what to focus on.',
+    "State, from this conversation only: the user's current goal (their latest intent, not superseded ones);",
+    'what is done and what is not; the exact next step; decisions or constraints the user set; approaches already ruled out.',
+    'Name concrete files, commands and identifiers. Do not guess: leave out anything the conversation does not establish,',
+    'and if the work is finished, say so instead of inventing a next step. Never include secrets.',
+    'Reply with ONE line, at most 60 words, in the language the user writes in, parts separated by semicolons.',
+    'No preamble, no quotes, no markdown.',
+].join(' ');
+const IDLE = { status: 'idle' };
+const BAR_WIDTH = 20;
+const bar = (current, window) => {
+    const filled = Math.min(BAR_WIDTH, Math.round((current / window) * BAR_WIDTH));
+    return { filled: '▰'.repeat(filled), empty: '▱'.repeat(BAR_WIDTH - filled) };
+};
+// Desktop draws the fill as a real bar; the terminal has no Svg.
+const barSvg = (current, window) => {
+    const fill = Math.min(100, (current / window) * 100).toFixed(1);
+    // No viewBox, so rx stays in pixels and both ends are true semicircles at any width.
+    return [
+        '<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="6">',
+        '<rect width="100%" height="6" rx="3" fill="#8883" />',
+        `<rect width="${fill}%" height="6" rx="3" fill="#e0af68" />`,
+        '</svg>',
+    ].join('');
+};
+const formatK = (n) => (n >= 1000000 ? `${n / 1000000}M` : `${Math.round(n / 1000)}k`);
+const tokens = atom({ plugin: 'handoff-nudge', key: 'tokens' }, null);
+const contextWindow = atom({ plugin: 'handoff-nudge', key: 'window' }, 0);
+const isHidden = atom({ plugin: 'handoff-nudge', key: 'isHidden' }, false);
+const suggestion = atom({ plugin: 'handoff-nudge', key: 'suggestion' }, IDLE);
+const hasHandoff = atom({ plugin: 'handoff-nudge', key: 'hasHandoff' }, true);
+const isResumeHidden = atom({ plugin: 'handoff-nudge', key: 'isResumeHidden' }, false);
+export const register = on => {
+    // Remember each handoff doc this session writes, so the next session in this cwd can offer it.
+    on('tool.call', { tool: 'Write' }, async ($, e, next) => {
+        const ran = await next(e);
+        if (ran.deny !== undefined || ran.isError === true || !isHandoffDoc(e.file_path, await $.env.get('TMPDIR'))) {
+            return ran;
+        }
+        const entry = { path: e.file_path, cwd: await $.session.cwd(), at: await $.clock.now() };
+        const kept = (await readHandoffs($.store)).filter(h => h.path !== entry.path);
+        await $.store.set(HANDOFFS_KEY, [entry, ...kept].slice(0, MAX_KEPT));
+        return ran;
+    });
+    // Re-arm the resume band for the next empty conversation (/clear keeps this session's state).
+    on('prompt.submit', async ($, e, next) => {
+        await update($, isResumeHidden, () => false);
+        return next(e);
+    });
+    on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+        const rest = await next(e);
+        // Only an empty conversation (a new session or after /clear) is starting from a handoff.
+        if (e.props.hasSurvey || (await read($, isResumeHidden)) || (await $.session.turns()) > 0) {
+            return rest;
+        }
+        const cwd = await $.session.cwd();
+        const now = await $.clock.now();
+        const candidates = (await readHandoffs($.store)).filter(h => h.cwd === cwd && !h.isResumed && now - h.at < MAX_AGE_MS);
+        const shown = [];
+        for (const h of candidates) {
+            if (shown.length === MAX_SHOWN)
+                break;
+            // The OS clears $TMPDIR on its own schedule; skip docs that are gone.
+            if (await $.fs.exists(h.path))
+                shown.push(h);
+        }
+        if (shown.length === 0) {
+            return rest;
+        }
+        const { Box, Button, Text } = $.ui.resolve(e);
+        const frame = e.surface === 'desktop'
+            ? { rowGap: 1, paddingX: 1, paddingY: 1 }
+            : { borderStyle: 'round', borderColor: 'suggestion', paddingX: 1 };
+        const resume = async (h) => {
+            const all = await readHandoffs($.store);
+            await $.store.set(HANDOFFS_KEY, all.map(x => (x.path === h.path ? { ...x, isResumed: true } : x)));
+            await update($, isResumeHidden, () => true);
+            // Trailing space: the user usually adds what to do next after the path.
+            await $.prompt.fill({ text: `${h.path} ` });
+        };
+        return (<Box flexDirection="column">
+        {rest}
+        <Box flexDirection="column" {...frame}>
+          <Box justifyContent="space-between" alignItems="center" columnGap={2}>
+            <Text color="suggestion" bold>
+              ↻ Resume from a handoff
+            </Text>
+            <Button key="resume-hide" label="Hide" onPress={() => update($, isResumeHidden, () => true)}/>
+          </Box>
+          {shown.map((h, i) => (<Box key={h.path} justifyContent="space-between" alignItems="center" columnGap={2}>
+              <Text>
+                {basename(h.path)} <Text dimColor>· {formatAge(now - h.at)}</Text>
+              </Text>
+              <Button key={`resume-${i}`} variant={i === 0 ? 'primary' : undefined} label="Resume" onPress={() => resume(h)}/>
+            </Box>))}
+        </Box>
+      </Box>);
+    });
+    on('session.measure', async ($, e, next) => {
+        const current = e.context.tokens ?? null;
+        await update($, tokens, () => current);
+        await update($, contextWindow, () => e.context.window);
+        // Re-arm the band once context drops back under the threshold (compact, /clear).
+        if (current === null || current < THRESHOLD) {
+            await update($, isHidden, () => false);
+            await update($, suggestion, () => IDLE);
+        }
+        else {
+            const found = (await $.command.list()).some(c => c.name === 'handoff');
+            await update($, hasHandoff, () => found);
+        }
+        return next(e);
+    });
+    on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+        // Keep what Claude Code and other mods draw here; the card goes below it.
+        const rest = await next(e);
+        const current = await read($, tokens);
+        const isQuiet = e.props.hasSurvey || current === null || current < THRESHOLD || (await read($, isHidden));
+        if (isQuiet) {
+            return rest;
+        }
+        const { Box, Button, Text } = $.ui.resolve(e);
+        const window = await read($, contextWindow);
+        const s = await read($, suggestion);
+        const isMissing = !(await read($, hasHandoff));
+        const percent = window > 0 ? Math.round((current / window) * 100) : undefined;
+        const { filled, empty } = bar(current, window);
+        let meter;
+        if (e.surface === 'desktop') {
+            const { Svg } = $.ui.resolve(e);
+            meter = <Svg source={barSvg(current, window)} alt={`${percent}% of the context window used`} height={6}/>;
+        }
+        else {
+            meter = (<Text>
+          <Text color="warning">{filled}</Text>
+          <Text dimColor>{empty}</Text>
+        </Text>);
+        }
+        // The desktop band already sits in a panel: space the rows out instead of framing them.
+        const frame = e.surface === 'desktop'
+            ? { rowGap: 1, paddingX: 1, paddingY: 1 }
+            : { borderStyle: 'round', borderColor: 'warning', paddingX: 1 };
+        const card = (body, buttons, footer) => (<Box flexDirection="column">
+        {rest}
+        <Box flexDirection="column" {...frame}>
+          <Box justifyContent="space-between">
+            <Text color="warning" bold>
+              ⚠ Context {formatK(current)}
+              {window > 0 && <Text dimColor> / {formatK(window)}</Text>}
+            </Text>
+            {percent !== undefined && <Text dimColor>{percent}%</Text>}
+          </Box>
+          {window > 0 && meter}
+          <Box justifyContent="space-between" alignItems="center" columnGap={2}>
+            {body}
+            <Box columnGap={1}>{buttons}</Box>
+          </Box>
+          {footer}
+        </Box>
+      </Box>);
+        const hide = <Button key="hide" label="Hide" onPress={() => update($, isHidden, () => true)}/>;
+        if (isMissing) {
+            return card(<Text dimColor>/handoff skill is not installed.</Text>, [<Button key="install" label="Install /handoff" onPress={press => $.prompt.fill({ text: installPrompt(press.surface) })}/>, hide]);
+        }
+        const suggest = async () => {
+            await update($, suggestion, () => ({ status: 'loading' }));
+            const reply = await $.model.fork({ prompt: SUGGEST_PROMPT });
+            const focus = reply.isAnswered ? reply.text.trim().split('\n')[0]?.trim() : undefined;
+            const result = focus
+                ? { status: 'ready', focus }
+                : { status: 'failed', reason: reply.isAnswered ? 'empty reply' : reply.reason };
+            await update($, suggestion, () => result);
+            if (focus) {
+                await $.prompt.fill({ text: `/handoff ${focus}` });
+            }
+        };
+        return card(<Text dimColor>Long session — hand off to a fresh one.</Text>, [
+            <Button key="suggest" variant="primary" label={s.status === 'loading' ? 'Suggesting…' : 'Suggest handoff'} onPress={() => (s.status === 'loading' ? undefined : suggest())}/>,
+            hide,
+        ], 
+        // A ready focus is already in the prompt; only a failure needs saying here.
+        s.status === 'failed' ? <Text color="error">↳ Could not suggest: {s.reason}</Text> : undefined);
+    });
+};
