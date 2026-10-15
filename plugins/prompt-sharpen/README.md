@@ -6,6 +6,8 @@
 
 Asks up to three multiple-choice questions about what the prompt leaves open. Each has its recommended answer already picked: change it, type your own with **Other**, or **Skip**.
 
+![Questions step](docs/questions.svg)
+
 ## Rewrite
 
 Rewrites the prompt clearer and more complete with the same intent, keeping every detail of the original. It adds only what came from your answers, the conversation, or structure and output format.
@@ -16,6 +18,8 @@ Rewrites the prompt clearer and more complete with the same intent, keeping ever
 ## Review
 
 Shows the sharpened prompt first, then what was added, with your original as a single line below.
+
+![Review step](docs/review.svg)
 
 | Action | What it does |
 | --- | --- |
