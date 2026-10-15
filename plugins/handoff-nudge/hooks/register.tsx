@@ -101,17 +101,24 @@ export const register: Register = on => {
     return next(e)
   })
 
+  // `claude --resume` / `--continue` start with turns already in the transcript.
+  on('session.start', async ($, e, next) => {
+    const isEmpty = (await $.session.turns()) === 0
+    await update($, isConversationEmpty, () => isEmpty)
+    return next(e)
+  })
+
   // The band's drawing is cached; this write is what redraws it after /clear.
+  // turns() can't tell: the cleared transcript starts with the /clear command, a user turn.
   on('session.end', async ($, e, next) => {
-    if (e.reason === 'clear') await update($, isConversationEmpty, () => true)
+    await update($, isConversationEmpty, () => e.reason === 'clear')
     return next(e)
   })
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     const rest = await next(e)
     // Only an empty conversation (a new session or after /clear) is starting from a handoff.
-    const isEmpty = (await read($, isConversationEmpty)) && (await $.session.turns()) === 0
-    if (e.props.hasSurvey || (await read($, isResumeHidden)) || !isEmpty) {
+    if (e.props.hasSurvey || (await read($, isResumeHidden)) || !(await read($, isConversationEmpty))) {
       return rest
     }
 

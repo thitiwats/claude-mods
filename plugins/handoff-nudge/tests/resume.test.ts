@@ -17,12 +17,12 @@ const HOUR = 60 * 60 * 1000
 const DAY = 24 * HOUR
 
 // The world a fresh session in /w/app sees: an empty conversation, every file present, Write succeeding.
-const world = (on: On, opts: { turns?: number | (() => number); isPresent?: boolean; store?: Record<string, unknown> } = {}) => {
+const world = (on: On, opts: { turns?: number; isPresent?: boolean; store?: Record<string, unknown> } = {}) => {
   mock.store(on, opts.store)
   mock.env(on, { TMPDIR })
   on('ui.render', () => ({ type: 'Box', props: { key: 'engine' }, children: [] }))
   on('session.cwd', () => ({ value: '/w/app' }))
-  on('session.turns', () => ({ value: typeof opts.turns === 'function' ? opts.turns() : (opts.turns ?? 0) }))
+  on('session.turns', () => ({ value: opts.turns ?? 0 }))
   on('fs.exists', () => ({ value: opts.isPresent ?? true }))
   on('tool.call', () => ({ result: { type: 'create', filePath: DOC, content: '', structuredPatch: [] } }) as never)
   return mock.clock(on, { now: 100 * DAY })
@@ -56,10 +56,21 @@ for (const surface of ['terminal', 'desktop'] as const) {
     expect(await (await mount($)).find({ key: 'resume-0' })).toBeUndefined()
   })
 
-  test(`${surface}: hidden once the conversation has turns`, async ($, on) => {
-    world(on, { turns: 1 })
+  test(`${surface}: hidden in a conversation resumed at startup`, async ($, on) => {
+    world(on, { turns: 3 })
+    on('session.start', () => ({ cwd: '/w/app' }))
     await $.tool.call({ tool: 'Write', file_path: DOC, content: '' })
+    await $.session.start({ cwd: '/w/app', surface, isInteractive: true })
     expect(await (await mount($)).find({ key: 'resume-0' })).toBeUndefined()
+  })
+
+  test(`${surface}: hidden after /resume switches to another conversation`, async ($, on) => {
+    world(on)
+    on('session.end', () => ({ sessionId: 's' }))
+    await $.tool.call({ tool: 'Write', file_path: DOC, content: '' })
+    const ui = await mount($)
+    await $.session.end({ reason: 'resume' } as never)
+    expect(await ui.find({ key: 'resume-0' })).toBeUndefined()
   })
 
   test(`${surface}: hidden when the doc is gone`, async ($, on) => {
@@ -93,9 +104,9 @@ for (const surface of ['terminal', 'desktop'] as const) {
     expect(await (await mount($)).find({ key: 'resume-0' })).toBeUndefined()
   })
 
+  // The cleared transcript starts with the /clear command itself, so turns() stays 1.
   test(`${surface}: the band comes back on the same drawing after /clear`, async ($, on) => {
-    let turns = 1
-    world(on, { turns: () => turns })
+    world(on, { turns: 1 })
     on('prompt.submit', (_$, e) => ({ text: e.text }))
     on('session.end', () => ({ sessionId: 's' }))
     await $.tool.call({ tool: 'Write', file_path: DOC, content: '' })
@@ -103,7 +114,6 @@ for (const surface of ['terminal', 'desktop'] as const) {
     const ui = await mount($)
     expect(await ui.find({ key: 'resume-0' })).toBeUndefined()
 
-    turns = 0
     await $.session.end({ reason: 'clear' } as never)
     expect(await ui.find({ key: 'resume-0' })).toBeDefined()
   })
