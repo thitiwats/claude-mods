@@ -17,12 +17,12 @@ const HOUR = 60 * 60 * 1000
 const DAY = 24 * HOUR
 
 // The world a fresh session in /w/app sees: an empty conversation, every file present, Write succeeding.
-const world = (on: On, opts: { turns?: number; isPresent?: boolean; store?: Record<string, unknown> } = {}) => {
+const world = (on: On, opts: { turns?: number | (() => number); isPresent?: boolean; store?: Record<string, unknown> } = {}) => {
   mock.store(on, opts.store)
   mock.env(on, { TMPDIR })
   on('ui.render', () => ({ type: 'Box', props: { key: 'engine' }, children: [] }))
   on('session.cwd', () => ({ value: '/w/app' }))
-  on('session.turns', () => ({ value: opts.turns ?? 0 }))
+  on('session.turns', () => ({ value: typeof opts.turns === 'function' ? opts.turns() : (opts.turns ?? 0) }))
   on('fs.exists', () => ({ value: opts.isPresent ?? true }))
   on('tool.call', () => ({ result: { type: 'create', filePath: DOC, content: '', structuredPatch: [] } }) as never)
   return mock.clock(on, { now: 100 * DAY })
@@ -91,5 +91,20 @@ for (const surface of ['terminal', 'desktop'] as const) {
     const ui = await mount($)
     await ui.press({ key: 'resume-hide' })
     expect(await (await mount($)).find({ key: 'resume-0' })).toBeUndefined()
+  })
+
+  test(`${surface}: the band comes back on the same drawing after /clear`, async ($, on) => {
+    let turns = 1
+    world(on, { turns: () => turns })
+    on('prompt.submit', (_$, e) => ({ text: e.text }))
+    on('session.end', () => ({ sessionId: 's' }))
+    await $.tool.call({ tool: 'Write', file_path: DOC, content: '' })
+    await $.prompt.submit({ text: 'hi' } as never)
+    const ui = await mount($)
+    expect(await ui.find({ key: 'resume-0' })).toBeUndefined()
+
+    turns = 0
+    await $.session.end({ reason: 'clear' } as never)
+    expect(await ui.find({ key: 'resume-0' })).toBeDefined()
   })
 }

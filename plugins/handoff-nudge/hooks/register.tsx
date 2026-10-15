@@ -79,6 +79,7 @@ const isHidden = atom({ plugin: 'handoff-nudge', key: 'isHidden' } as const, fal
 const suggestion = atom({ plugin: 'handoff-nudge', key: 'suggestion' } as const, IDLE)
 const hasHandoff = atom({ plugin: 'handoff-nudge', key: 'hasHandoff' } as const, true)
 const isResumeHidden = atom({ plugin: 'handoff-nudge', key: 'isResumeHidden' } as const, false)
+const isConversationEmpty = atom({ plugin: 'handoff-nudge', key: 'isConversationEmpty' } as const, true)
 
 export const register: Register = on => {
   // Remember each handoff doc this session writes, so the next session in this cwd can offer it.
@@ -96,13 +97,21 @@ export const register: Register = on => {
   // Re-arm the resume band for the next empty conversation (/clear keeps this session's state).
   on('prompt.submit', async ($, e, next) => {
     await update($, isResumeHidden, () => false)
+    await update($, isConversationEmpty, () => false)
+    return next(e)
+  })
+
+  // The band's drawing is cached; this write is what redraws it after /clear.
+  on('session.end', async ($, e, next) => {
+    if (e.reason === 'clear') await update($, isConversationEmpty, () => true)
     return next(e)
   })
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     const rest = await next(e)
     // Only an empty conversation (a new session or after /clear) is starting from a handoff.
-    if (e.props.hasSurvey || (await read($, isResumeHidden)) || (await $.session.turns()) > 0) {
+    const isEmpty = (await read($, isConversationEmpty)) && (await $.session.turns()) === 0
+    if (e.props.hasSurvey || (await read($, isResumeHidden)) || !isEmpty) {
       return rest
     }
 
