@@ -45,7 +45,19 @@ for (const surface of ['terminal', 'desktop'] as const) {
     expect(await (await mount($)).find({ key: 'suggest' })).toBeDefined()
   })
 
-  test(`${surface}: missing /handoff offers to fill the skills.sh install command`, async ($, on) => {
+  test(`${surface}: card shows the context fill against the window`, async ($, on) => {
+    on('session.measure', (_$, e) => ({ changed: e.changed }))
+    on('ui.render', () => ({ type: 'Box', props: { key: 'engine' }, children: [] }))
+    on('command.list', () => ({ value: [HANDOFF] }))
+
+    await $.session.measure(measure(210_000))
+    const drawn = JSON.stringify(await (await mount($)).drawn())
+    expect(drawn).toContain('210k')
+    expect(drawn).toContain('1M')
+    expect(drawn).toContain(surface === 'desktop' ? '"type":"Svg"' : '"▰▰▰▰"')
+  })
+
+  test(`${surface}: missing /handoff fills the skills.sh install: a ! line on the terminal, a request to Claude on desktop`, async ($, on) => {
     const filled: string[] = []
     on('session.measure', (_$, e) => ({ changed: e.changed }))
     on('ui.render', () => ({ type: 'Box', props: { key: 'engine' }, children: [] }))
@@ -57,7 +69,10 @@ for (const surface of ['terminal', 'desktop'] as const) {
     expect(await ui.find({ key: 'suggest' })).toBeUndefined()
     await ui.press({ key: 'install' })
 
-    expect(filled).toEqual(['! npx -y skills add mattpocock/skills -s handoff -g -a claude-code -y'])
+    const command = 'npx -y skills add mattpocock/skills -s handoff -g -a universal claude-code -y'
+    expect(filled).toEqual([
+      surface === 'terminal' ? `! ${command}` : `Install the /handoff skill by running this shell command: ${command}`,
+    ])
   })
 
   test(`${surface}: suggest forks the transcript and fills /handoff with the focus`, async ($, on) => {
@@ -76,6 +91,6 @@ for (const surface of ['terminal', 'desktop'] as const) {
 
     expect(filled).toEqual(['/handoff Finish the mod install'])
     const after = await mount($)
-    expect(JSON.stringify(await after.drawn())).toContain('Finish the mod install')
+    expect(JSON.stringify(await after.drawn())).not.toContain('Finish the mod install')
   })
 }

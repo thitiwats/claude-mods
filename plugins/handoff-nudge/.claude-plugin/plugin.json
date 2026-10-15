@@ -1,1 +1,1 @@
-{ "name": "handoff-nudge", "version": "0.2.0", "description": "Band above the prompt suggesting /handoff once context passes 200k tokens", "types": "./types/index.d.ts" }
+{ "name": "handoff-nudge", "version": "0.3.0", "description": "Band above the prompt suggesting /handoff once context passes 200k tokens", "types": "./types/index.d.ts" }
