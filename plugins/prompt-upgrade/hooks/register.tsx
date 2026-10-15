@@ -22,8 +22,10 @@ const LANGUAGE =
 const questionsPrompt = (original: string) =>
   [
     'The user wants to send the prompt below to you, and asked to improve it first.',
-    'Ask at most 3 multiple-choice clarifying questions about what the prompt leaves open that would most change the result;',
-    'ask none when the prompt is already clear or this conversation already answers it.',
+    'Ask at most 3 multiple-choice clarifying questions about what the prompt leaves open that would most change the result.',
+    'Ask one only when the user\'s intent could go two ways that lead to clearly different results, and neither the prompt nor this conversation settles it.',
+    'Never ask about what you could find by reading the code or files, edge cases or implementation details you would sensibly decide yourself, or work the prompt does not mention (tests, docs, error handling).',
+    'When the prompt already says what to do and where, ask none and reply {"questions":[]}: that is the expected answer for a clear prompt.',
     'Give each question 2 to 4 short options. Put first the option you judge most likely matches what the user means,',
     'given this conversation: it is shown to them as the recommended one.',
     `Questions and options: ${LANGUAGE}`,
