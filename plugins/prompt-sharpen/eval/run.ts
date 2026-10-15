@@ -1,5 +1,5 @@
 // Runs the mod's real prompts against a real model and grades the rewrites with a judge model.
-// Usage: bun plugins/prompt-upgrade/eval/run.ts [--model <m>] [--judge <m>] [--case <name>]
+// Usage: bun plugins/prompt-sharpen/eval/run.ts [--model <m>] [--judge <m>] [--case <name>]
 import { readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'

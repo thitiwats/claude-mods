@@ -3,13 +3,13 @@ import type { EngineInterface, Register, RenderChildren } from 'claude-code'
 
 import type { Answer, Ask, Question, Rewrite, Upgrade } from '../types'
 
-const PANE = 'prompt-upgrade'
-const USAGE = 'Usage: /prompt-upgrade <prompt>'
+const PANE = 'prompt-sharpen'
+const USAGE = 'Usage: /prompt-sharpen <prompt>'
 
 const MAX_QUESTIONS = 3
 const MAX_OPTIONS = 4
 
-const upgrade = atom({ plugin: 'prompt-upgrade', key: 'upgrade' } as const, null as Upgrade | null)
+const upgrade = atom({ plugin: 'prompt-sharpen', key: 'upgrade' } as const, null as Upgrade | null)
 
 const IDLE = { status: 'idle' } as const
 const LOADING = { status: 'loading' } as const
@@ -147,14 +147,14 @@ const finish = async ($: EngineInterface) => {
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await $.command.register({
-      name: 'prompt-upgrade',
+      name: 'prompt-sharpen',
       description: 'Ask a few questions, then rewrite a prompt clearer and more complete with the same intent',
       argumentHint: '<prompt>',
     })
     return next(e)
   })
 
-  on('command.run', { command: 'prompt-upgrade' }, async ($, e) => {
+  on('command.run', { command: 'prompt-sharpen' }, async ($, e) => {
     const original = e.args.trim()
     if (!original) return { text: USAGE }
 

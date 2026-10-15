@@ -47,13 +47,13 @@ const forks = (on: On, seen: { asked: string[] }, replies: string[]) => {
 }
 
 for (const surface of ['terminal', 'desktop'] as const) {
-  const mount = ($: Engine) => $.ui.mount({ plugin: 'prompt-upgrade', surface, component: 'Pane', requestId: 'prompt-upgrade', props: PROPS })
-  const run = ($: Engine, args: string) => $.command.run({ command: 'prompt-upgrade', args } as never)
+  const mount = ($: Engine) => $.ui.mount({ plugin: 'prompt-sharpen', surface, component: 'Pane', requestId: 'prompt-sharpen', props: PROPS })
+  const run = ($: Engine, args: string) => $.command.run({ command: 'prompt-sharpen', args } as never)
 
   test(`${surface}: no prompt given shows how to use the command`, async ($, on) => {
     const seen = world(on)
     const ran = await run($, '  ')
-    expect(ran.text).toContain('Usage: /prompt-upgrade <prompt>')
+    expect(ran.text).toContain('Usage: /prompt-sharpen <prompt>')
     expect(seen.asked).toEqual([])
   })
 
@@ -76,7 +76,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
 
     await pane.press({ key: 'run' })
     expect(seen.submitted).toEqual(['I run a pizza chain and need a 30-day plan to grow online orders.'])
-    expect(seen.closed).toEqual(['prompt-upgrade'])
+    expect(seen.closed).toEqual(['prompt-sharpen'])
   })
 
   test(`${surface}: untouched recommended answers are sent as unconfirmed, picked ones are not`, async ($, on) => {

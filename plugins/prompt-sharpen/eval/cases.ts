@@ -1,4 +1,4 @@
-// Prompts a developer might hand /prompt-upgrade: short and long, vague and clear, Thai and English.
+// Prompts a developer might hand /prompt-sharpen: short and long, vague and clear, Thai and English.
 export const CASES: { name: string; prompt: string }[] = [
   { name: 'vague-en', prompt: 'fix the login bug' },
   { name: 'vague-th', prompt: 'ช่วยทำให้ API เร็วขึ้นหน่อย' },

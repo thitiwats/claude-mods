@@ -3,6 +3,6 @@
   "owner": { "name": "thitiwats" },
   "plugins": [
     { "name": "handoff-nudge", "source": "./plugins/handoff-nudge" },
-    { "name": "prompt-upgrade", "source": "./plugins/prompt-upgrade" }
+    { "name": "prompt-sharpen", "source": "./plugins/prompt-sharpen" }
   ]
 }

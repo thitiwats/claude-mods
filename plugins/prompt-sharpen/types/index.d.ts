@@ -14,7 +14,7 @@ export type Answer = { kind: 'option'; index: number; isGuess?: boolean } | { ki
 /** The upgraded prompt and the added details it states that the original prompt did not. */
 export type Rewrite = { text: string; added: string[] }
 
-/** One run of /prompt-upgrade, from the original prompt to the upgraded one; `id` tells a stale reply from the current run. */
+/** One run of /prompt-sharpen, from the original prompt to the upgraded one; `id` tells a stale reply from the current run. */
 export type Upgrade = {
   id: number
   original: string
@@ -25,7 +25,7 @@ export type Upgrade = {
 
 declare module 'claude-code' {
   interface PluginState {
-    'prompt-upgrade': {
+    'prompt-sharpen': {
       upgrade: Upgrade | null
     }
   }

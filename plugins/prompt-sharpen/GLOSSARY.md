@@ -1,11 +1,11 @@
-# prompt-upgrade
+# prompt-sharpen
 
 A mod that turns a prompt the user hands it into a clearer, more complete one with the same intent, asking a few questions first when the prompt leaves something open.
 
 ## Language
 
 **Original prompt**:
-The text the user hands to `/prompt-upgrade`, before any change.
+The text the user hands to `/prompt-sharpen`, before any change.
 _Avoid_: Input, draft, raw prompt
 
 **Clarifying question**:
