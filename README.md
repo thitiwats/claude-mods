@@ -6,7 +6,7 @@ Claude Code mods, published as a plugin marketplace.
 
 | Mod | What it does |
 | --- | --- |
-| [handoff-nudge](plugins/handoff-nudge) | Shows a band above the prompt once the context passes 200k tokens, with a **Suggest handoff** button that asks the session's model what the next session should focus on and fills `/handoff <focus>` into the prompt. Requires a `/handoff` skill. |
+| [handoff-nudge](plugins/handoff-nudge) | Shows a band above the prompt once the context passes 200k tokens, with a **Suggest handoff** button that asks the session's model what the next session should focus on and fills `/handoff <focus>` into the prompt. If `/handoff` is not installed, the band offers an **Install /handoff** button that fills the [skills.sh](https://skills.sh/) install command (`mattpocock/skills`) into the prompt for you to run. |
 
 ## Install
 

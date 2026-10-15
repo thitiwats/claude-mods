@@ -9,6 +9,6 @@ export type Suggestion =
 
 declare module 'claude-code' {
   interface PluginState {
-    'handoff-nudge': { tokens: Tokens; isHidden: boolean; suggestion: Suggestion }
+    'handoff-nudge': { tokens: Tokens; isHidden: boolean; suggestion: Suggestion; hasHandoff: boolean }
   }
 }

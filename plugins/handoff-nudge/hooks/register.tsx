@@ -5,6 +5,9 @@ import type { Suggestion } from '../types'
 
 const THRESHOLD = 200_000
 
+// Filled into the prompt for the person to run when /handoff is missing (skills.sh).
+const INSTALL_COMMAND = '! npx -y skills add mattpocock/skills -s handoff -g -a claude-code -y'
+
 const SUGGEST_PROMPT = [
   'The conversation so far is about to be handed off to a fresh session via /handoff.',
   'Reply with ONE line (max 25 words, same language the user writes in) describing what the next session should focus on:',
@@ -16,6 +19,7 @@ const IDLE: Suggestion = { status: 'idle' }
 const tokens = atom({ plugin: 'handoff-nudge', key: 'tokens' } as const, null)
 const isHidden = atom({ plugin: 'handoff-nudge', key: 'isHidden' } as const, false)
 const suggestion = atom({ plugin: 'handoff-nudge', key: 'suggestion' } as const, IDLE)
+const hasHandoff = atom({ plugin: 'handoff-nudge', key: 'hasHandoff' } as const, true)
 
 export const register: Register = on => {
   on('session.measure', async ($, e, next) => {
@@ -26,6 +30,9 @@ export const register: Register = on => {
     if (current === null || current < THRESHOLD) {
       await update($, isHidden, () => false)
       await update($, suggestion, () => IDLE)
+    } else {
+      const found = (await $.command.list()).some(c => c.name === 'handoff')
+      await update($, hasHandoff, () => found)
     }
 
     return next(e)
@@ -43,6 +50,16 @@ export const register: Register = on => {
     const { Box, Button, Text } = $.ui.resolve(e)
     const k = Math.round(current / 1000)
     const s = await read($, suggestion)
+
+    if (!(await read($, hasHandoff))) {
+      return (
+        <Box>
+          <Text color="warning">Context at {k}k tokens. The /handoff skill is not installed. </Text>
+          <Button key="install" label="Install /handoff" onPress={() => $.prompt.fill({ text: INSTALL_COMMAND })} />
+          <Button key="hide" label="Hide" onPress={() => update($, isHidden, () => true)} />
+        </Box>
+      )
+    }
 
     const suggest = async () => {
       await update($, suggestion, () => ({ status: 'loading' }))

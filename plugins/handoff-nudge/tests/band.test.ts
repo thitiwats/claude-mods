@@ -12,6 +12,8 @@ const PROPS = {
 
 const USAGE = { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 }
 
+const HANDOFF = { name: 'handoff', description: '', source: 'user' as const }
+
 const measure = (tokens: number) => ({
   context: { tokens, window: 1_000_000 },
   rateLimits: [],
@@ -25,6 +27,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
   test(`${surface}: hidden under 200k, shown past it, hide re-arms after compaction`, async ($, on) => {
     on('session.measure', (_$, e) => ({ changed: e.changed }))
     on('ui.render', () => ({ type: 'Box', props: { key: 'engine' }, children: [] }))
+    on('command.list', () => ({ value: [HANDOFF] }))
 
     await $.session.measure(measure(150_000))
     expect(await (await mount($)).find({ key: 'suggest' })).toBeUndefined()
@@ -42,10 +45,26 @@ for (const surface of ['terminal', 'desktop'] as const) {
     expect(await (await mount($)).find({ key: 'suggest' })).toBeDefined()
   })
 
+  test(`${surface}: missing /handoff offers to fill the skills.sh install command`, async ($, on) => {
+    const filled: string[] = []
+    on('session.measure', (_$, e) => ({ changed: e.changed }))
+    on('ui.render', () => ({ type: 'Box', props: { key: 'engine' }, children: [] }))
+    on('command.list', () => ({ value: [] }))
+    on('prompt.fill', (_$, e) => (filled.push(e.text), { isFilled: true }))
+
+    await $.session.measure(measure(210_000))
+    const ui = await mount($)
+    expect(await ui.find({ key: 'suggest' })).toBeUndefined()
+    await ui.press({ key: 'install' })
+
+    expect(filled).toEqual(['! npx -y skills add mattpocock/skills -s handoff -g -a claude-code -y'])
+  })
+
   test(`${surface}: suggest forks the transcript and fills /handoff with the focus`, async ($, on) => {
     const filled: string[] = []
     on('session.measure', (_$, e) => ({ changed: e.changed }))
     on('ui.render', () => ({ type: 'Box', props: { key: 'engine' }, children: [] }))
+    on('command.list', () => ({ value: [HANDOFF] }))
     on('model.fork', () => ({
       value: { isAnswered: true as const, text: 'Finish the mod install\nextra line', usage: USAGE },
     }))
