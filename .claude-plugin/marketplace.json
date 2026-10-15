@@ -1,5 +1,8 @@
 {
   "name": "claude-mods",
   "owner": { "name": "thitiwats" },
-  "plugins": [{ "name": "handoff-nudge", "source": "./plugins/handoff-nudge" }]
+  "plugins": [
+    { "name": "handoff-nudge", "source": "./plugins/handoff-nudge" },
+    { "name": "prompt-upgrade", "source": "./plugins/prompt-upgrade" }
+  ]
 }

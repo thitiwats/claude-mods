@@ -1,0 +1,6 @@
+{
+  "name": "prompt-upgrade",
+  "version": "0.1.0",
+  "description": "/prompt-upgrade <prompt> opens a pane that asks a few clarifying questions with recommended answers, then rewrites the prompt clearer and more complete with the same intent, to run, edit or copy",
+  "types": "./types/index.d.ts"
+}
