@@ -81,12 +81,6 @@ const hasHandoff = atom({ plugin: 'handoff-nudge', key: 'hasHandoff' } as const,
 const isResumeHidden = atom({ plugin: 'handoff-nudge', key: 'isResumeHidden' } as const, false)
 const isConversationEmpty = atom({ plugin: 'handoff-nudge', key: 'isConversationEmpty' } as const, true)
 
-// [dev-only] Appends a line to the store so a desktop run can be read back from disk.
-const trace = async ($: { store: { get(k: string): Promise<unknown>; set(k: string, v: unknown): Promise<unknown> }; clock: { now(): Promise<number> } }, line: string) => {
-  const prev = (await $.store.get('trace')) as string[] | undefined
-  await $.store.set('trace', [...(prev ?? []), `${new Date(await $.clock.now()).toISOString()} ${line}`].slice(-60))
-}
-
 export const register: Register = on => {
   // Remember each handoff doc this session writes, so the next session in this cwd can offer it.
   on('tool.call', { tool: 'Write' }, async ($, e, next) => {
@@ -104,7 +98,6 @@ export const register: Register = on => {
   on('prompt.submit', async ($, e, next) => {
     await update($, isResumeHidden, () => false)
     await update($, isConversationEmpty, () => false)
-    await trace($, `prompt.submit text=${JSON.stringify(e.text.slice(0, 30))}`)
     return next(e)
   })
 
@@ -112,7 +105,6 @@ export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     const isEmpty = (await $.session.turns()) === 0
     await update($, isConversationEmpty, () => isEmpty)
-    await trace($, `session.start turns=${await $.session.turns()} isEmpty=${isEmpty}`)
     return next(e)
   })
 
@@ -120,16 +112,11 @@ export const register: Register = on => {
   // turns() can't tell: the cleared transcript starts with the /clear command, a user turn.
   on('session.end', async ($, e, next) => {
     await update($, isConversationEmpty, () => e.reason === 'clear')
-    await trace($, `session.end reason=${e.reason}`)
     return next(e)
   })
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     const rest = await next(e)
-    await trace(
-      $,
-      `render AbovePrompt surface=${e.surface} survey=${e.props.hasSurvey} hidden=${await read($, isResumeHidden)} empty=${await read($, isConversationEmpty)}`,
-    )
     // Only an empty conversation (a new session or after /clear) is starting from a handoff.
     if (e.props.hasSurvey || (await read($, isResumeHidden)) || !(await read($, isConversationEmpty))) {
       return rest
