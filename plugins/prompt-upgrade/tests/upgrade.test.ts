@@ -79,6 +79,31 @@ for (const surface of ['terminal', 'desktop'] as const) {
     expect(seen.closed).toEqual(['prompt-upgrade'])
   })
 
+  test(`${surface}: untouched recommended answers are sent as unconfirmed, picked ones are not`, async ($, on) => {
+    const seen = world(on)
+    forks(on, seen, [QUESTIONS, REWRITE])
+    await run($, ORIGINAL)
+
+    const pane = await mount($)
+    await pane.press({ key: 'q1-1' })
+    await pane.press({ key: 'upgrade' })
+
+    expect(seen.asked[1]).toContain('A: More online orders (unconfirmed)')
+    expect(seen.asked[1]).toContain('A: $500 to $2,000\n')
+    expect(seen.asked[1]).not.toContain('$500 to $2,000 (unconfirmed)')
+  })
+
+  test(`${surface}: an upgraded prompt with a [placeholder] warns and offers Run anyway`, async ($, on) => {
+    const seen = world(on)
+    const withGap = '```json\n' + JSON.stringify({ prompt: 'Plan 30 days for [company name].', added: [] }) + '\n```'
+    forks(on, seen, [JSON.stringify({ questions: [] }), withGap])
+    await run($, ORIGINAL)
+
+    const review = JSON.stringify(await (await mount($)).drawn())
+    expect(review).toContain('Still has 1 [placeholder]')
+    expect(review).toContain('Run anyway')
+  })
+
   test(`${surface}: Other takes typed text and Skip leaves the question out`, async ($, on) => {
     const seen = world(on)
     forks(on, seen, [QUESTIONS, REWRITE])

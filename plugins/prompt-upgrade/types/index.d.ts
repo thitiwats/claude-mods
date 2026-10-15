@@ -8,8 +8,8 @@ export type Ask<T> =
 /** A clarifying question; its first option is the recommended option. */
 export type Question = { text: string; options: string[] }
 
-/** The user's answer to one clarifying question: an option by index, their own text, or skipped. */
-export type Answer = { kind: 'option'; index: number } | { kind: 'other'; text: string } | { kind: 'skip' }
+/** The user's answer to one clarifying question: an option by index (`isGuess` while it is still the recommended one nobody picked), their own text, or skipped. */
+export type Answer = { kind: 'option'; index: number; isGuess?: boolean } | { kind: 'other'; text: string } | { kind: 'skip' }
 
 /** The upgraded prompt and the added details it states that the original prompt did not. */
 export type Rewrite = { text: string; added: string[] }

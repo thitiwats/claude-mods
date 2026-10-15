@@ -37,11 +37,14 @@ const questionsPrompt = (original: string) =>
 const rewritePrompt = (original: string, answered: string) =>
   [
     'Rewrite the user\'s prompt below into a clearer, more complete prompt for you, with the same intent.',
+    'Keep every detail, constraint, name, path, quote, and code snippet of the original; never drop or weaken one.',
     'Add only what comes from the user\'s answers, from this conversation, or structure and output format.',
+    'Never add work the user did not ask for (tests, docs, secrets, extra checks) or implementation choices (resources, libraries, outputs); if one seems worth suggesting, write it as an assumption.',
+    'Answers marked "unconfirmed" are your own guesses, which the user did not pick: write each as an assumption the user can change, not as a requirement.',
     'Never invent facts: write anything still unknown as a [placeholder].',
     LANGUAGE,
-    'Keep it under 300 words; shorter is fine when the task is simple.',
-    'Also list each detail the rewrite states that the original did not, a few words each, in the same language.',
+    'Keep it under 300 words, or 1.5 times the original\'s length when that is longer; shorter is fine when the task is simple.',
+    'Also list each detail the rewrite states that the original did not, including those inside examples and steps, a few words each, in the same language.',
     'Reply with JSON only, no markdown: {"prompt":"...","added":["..."]}',
     '',
     '<prompt>',
@@ -86,9 +89,9 @@ const answerText = (q: Question, a: Answer | undefined) =>
 
 const formatAnswers = (questions: Question[], answers: Answer[]) =>
   questions
-    .map((q, i) => ({ q, a: answerText(q, answers[i]) }))
+    .map((q, i) => ({ a: answerText(q, answers[i]), guess: answers[i]?.kind === 'option' && answers[i].isGuess, q }))
     .filter(({ a }) => a !== undefined)
-    .map(({ q, a }) => `Q: ${q.text}\nA: ${a}`)
+    .map(({ q, a, guess }) => `Q: ${q.text}\nA: ${a}${guess ? ' (unconfirmed)' : ''}`)
     .join('\n')
 
 const words = (text: string) => text.split(/\s+/).filter(Boolean).length
@@ -128,7 +131,7 @@ const askQuestions = async ($: EngineInterface, u: Upgrade) => {
     return
   }
   // Each question starts on its recommended option, so accepting them all is one press.
-  const ready: Upgrade = { ...u, questions: { status: 'ready', value }, answers: value.map(() => ({ kind: 'option', index: 0 })) }
+  const ready: Upgrade = { ...u, questions: { status: 'ready', value }, answers: value.map(() => ({ kind: 'option', index: 0, isGuess: true })) }
   await settle($, u.id, () => ready)
   if (value.length === 0) await rewrite($, u.id)
 }
@@ -266,6 +269,7 @@ export const register: Register = on => {
       body = failure(u.rewrite.reason, () => rewrite($, u.id))
     } else if (u.rewrite.status === 'ready') {
       const { text, added } = u.rewrite.value
+      const placeholders = text.match(/\[[^\]\n]+\]/g) ?? []
       body = (
         <Box flexDirection="column" rowGap={1}>
           {box('Upgraded prompt', text)}
@@ -283,12 +287,15 @@ export const register: Register = on => {
               ))}
             </Box>
           )}
+          {placeholders.length > 0 && (
+            <Text color="warning">{`! Still has ${placeholders.length} [placeholder] to fill: use Edit first, or Run anyway`}</Text>
+          )}
           {original}
           <Box columnGap={1} flexWrap="wrap">
             <Button
               key="run"
-              variant="primary"
-              label="▶ Run it"
+              variant={placeholders.length > 0 ? undefined : 'primary'}
+              label={placeholders.length > 0 ? '▶ Run anyway' : '▶ Run it'}
               onPress={async () => {
                 await finish($)
                 await $.prompt.submit({ text, asUser: true })
@@ -296,6 +303,7 @@ export const register: Register = on => {
             />
             <Button
               key="edit"
+              variant={placeholders.length > 0 ? 'primary' : undefined}
               label="Edit"
               onPress={async () => {
                 await finish($)
