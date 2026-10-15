@@ -98,6 +98,13 @@ const formatAnswers = (questions: Question[], answers: Answer[]) =>
 
 const words = (text: string) => text.split(/\s+/).filter(Boolean).length
 
+const isThai = (text: string) => /[\u0E00-\u0E7F]/.test(text)
+
+const placeholderWarning = (count: number, original: string) =>
+  isThai(original)
+    ? `! ยังเหลือ ${count} [placeholder] ที่ต้องเติม: กด Edit ก่อน หรือ Run anyway`
+    : `! Still has ${count} [placeholder] to fill: use Edit first, or Run anyway`
+
 // The fork sees this conversation; a new or cleared one has nothing to fork, so ask the same model without it.
 const ask = async ($: EngineInterface, prompt: string) => {
   const forked = await $.model.fork({ prompt })
@@ -290,7 +297,7 @@ export const register: Register = on => {
             </Box>
           )}
           {placeholders.length > 0 && (
-            <Text color="warning">{`! Still has ${placeholders.length} [placeholder] to fill: use Edit first, or Run anyway`}</Text>
+            <Text color="warning">{placeholderWarning(placeholders.length, u.original)}</Text>
           )}
           {original}
           <Box columnGap={1} flexWrap="wrap">

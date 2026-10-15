@@ -104,6 +104,17 @@ for (const surface of ['terminal', 'desktop'] as const) {
     expect(review).toContain('Run anyway')
   })
 
+  test(`${surface}: a Thai prompt gets the [placeholder] warning in Thai`, async ($, on) => {
+    const seen = world(on)
+    const withGap = '```json\n' + JSON.stringify({ prompt: 'วางแผน 30 วันให้ [ชื่อบริษัท]', added: [] }) + '\n```'
+    forks(on, seen, [JSON.stringify({ questions: [] }), withGap])
+    await run($, 'ทำแผนการตลาด 30 วันให้ร้านพิซซ่า')
+
+    const review = JSON.stringify(await (await mount($)).drawn())
+    expect(review).toContain('ยังเหลือ 1 [placeholder] ที่ต้องเติม')
+    expect(review).not.toContain('Still has')
+  })
+
   test(`${surface}: Other takes typed text and Skip leaves the question out`, async ($, on) => {
     const seen = world(on)
     forks(on, seen, [QUESTIONS, REWRITE])
