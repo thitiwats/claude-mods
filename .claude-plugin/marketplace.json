@@ -1,0 +1,5 @@
+{
+  "name": "claude-mods",
+  "owner": { "name": "thitiwats" },
+  "plugins": [{ "name": "handoff-nudge", "source": "./plugins/handoff-nudge" }]
+}
