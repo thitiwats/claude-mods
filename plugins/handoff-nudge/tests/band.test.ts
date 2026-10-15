@@ -27,8 +27,10 @@ for (const surface of ['terminal', 'desktop'] as const) {
   test(`${surface}: hidden under 200k, shown past it, hide re-arms after compaction`, async ($, on) => {
     on('session.measure', (_$, e) => ({ changed: e.changed }))
     on('ui.render', () => ({ type: 'Box', props: { key: 'engine' }, children: [] }))
+    on('prompt.submit', (_$, e) => ({ text: e.text }))
     on('command.list', () => ({ value: [HANDOFF] }))
 
+    await $.prompt.submit({ text: 'hi' } as never)
     await $.session.measure(measure(150_000))
     expect(await (await mount($)).find({ key: 'suggest' })).toBeUndefined()
 
@@ -48,8 +50,10 @@ for (const surface of ['terminal', 'desktop'] as const) {
   test(`${surface}: card shows the context fill against the window`, async ($, on) => {
     on('session.measure', (_$, e) => ({ changed: e.changed }))
     on('ui.render', () => ({ type: 'Box', props: { key: 'engine' }, children: [] }))
+    on('prompt.submit', (_$, e) => ({ text: e.text }))
     on('command.list', () => ({ value: [HANDOFF] }))
 
+    await $.prompt.submit({ text: 'hi' } as never)
     await $.session.measure(measure(210_000))
     const drawn = JSON.stringify(await (await mount($)).drawn())
     expect(drawn).toContain('210k')
@@ -61,9 +65,11 @@ for (const surface of ['terminal', 'desktop'] as const) {
     const filled: string[] = []
     on('session.measure', (_$, e) => ({ changed: e.changed }))
     on('ui.render', () => ({ type: 'Box', props: { key: 'engine' }, children: [] }))
+    on('prompt.submit', (_$, e) => ({ text: e.text }))
     on('command.list', () => ({ value: [] }))
     on('prompt.fill', (_$, e) => (filled.push(e.text), { isFilled: true }))
 
+    await $.prompt.submit({ text: 'hi' } as never)
     await $.session.measure(measure(210_000))
     const ui = await mount($)
     expect(await ui.find({ key: 'suggest' })).toBeUndefined()
@@ -79,12 +85,14 @@ for (const surface of ['terminal', 'desktop'] as const) {
     const filled: string[] = []
     on('session.measure', (_$, e) => ({ changed: e.changed }))
     on('ui.render', () => ({ type: 'Box', props: { key: 'engine' }, children: [] }))
+    on('prompt.submit', (_$, e) => ({ text: e.text }))
     on('command.list', () => ({ value: [HANDOFF] }))
     on('model.fork', () => ({
       value: { isAnswered: true as const, text: 'Finish the mod install\nextra line', usage: USAGE },
     }))
     on('prompt.fill', (_$, e) => (filled.push(e.text), { isFilled: true }))
 
+    await $.prompt.submit({ text: 'hi' } as never)
     await $.session.measure(measure(210_000))
     const ui = await mount($)
     await ui.press({ key: 'suggest' })

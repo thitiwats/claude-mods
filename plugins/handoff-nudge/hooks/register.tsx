@@ -1,9 +1,33 @@
 import { atom, read, update } from 'claude-code'
 import type { Register, RenderChildren } from 'claude-code'
 
-import type { Suggestion } from '../types'
+import type { Handoff, Suggestion } from '../types'
 
 const THRESHOLD = 200_000
+
+const HANDOFFS_KEY = 'handoffs'
+const MAX_KEPT = 20
+const MAX_SHOWN = 3
+const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
+
+// /handoff saves to $TMPDIR (else /tmp); macOS resolves /tmp through /private/tmp.
+const TMP_ROOTS = ['/tmp/', '/private/tmp/']
+
+const isHandoffDoc = (path: string, tmpdir: string | undefined) =>
+  /handoff/i.test(path) &&
+  path.endsWith('.md') &&
+  [...TMP_ROOTS, ...(tmpdir ? [tmpdir.endsWith('/') ? tmpdir : `${tmpdir}/`] : [])].some(root => path.startsWith(root))
+
+const asHandoffs = (value: unknown) => (Array.isArray(value) ? (value as Handoff[]) : [])
+
+const formatAge = (ms: number) => {
+  const minutes = Math.max(1, Math.round(ms / 60_000))
+  if (minutes < 60) return `${minutes}m ago`
+  const hours = Math.round(minutes / 60)
+  return hours < 48 ? `${hours}h ago` : `${Math.round(hours / 24)}d ago`
+}
+
+const basename = (path: string) => path.split('/').filter(Boolean).slice(-2).join('/')
 
 // Installs /handoff from skills.sh when it is missing: `universal` keeps the files in ~/.agents/skills and symlinks Claude Code's copy to them.
 const INSTALL_COMMAND = 'npx -y skills add mattpocock/skills -s handoff -g -a universal claude-code -y'
@@ -54,8 +78,102 @@ const contextWindow = atom({ plugin: 'handoff-nudge', key: 'window' } as const, 
 const isHidden = atom({ plugin: 'handoff-nudge', key: 'isHidden' } as const, false)
 const suggestion = atom({ plugin: 'handoff-nudge', key: 'suggestion' } as const, IDLE)
 const hasHandoff = atom({ plugin: 'handoff-nudge', key: 'hasHandoff' } as const, true)
+const isResumeHidden = atom({ plugin: 'handoff-nudge', key: 'isResumeHidden' } as const, false)
+const isConversationEmpty = atom({ plugin: 'handoff-nudge', key: 'isConversationEmpty' } as const, true)
 
 export const register: Register = on => {
+  // Remember each handoff doc this session writes, so the next session in this cwd can offer it.
+  on('tool.call', { tool: 'Write' }, async ($, e, next) => {
+    const ran = await next(e)
+    if (ran.deny !== undefined || ran.isError === true || !isHandoffDoc(e.file_path, await $.env.get('TMPDIR'))) {
+      return ran
+    }
+    const entry: Handoff = { path: e.file_path, cwd: await $.session.cwd(), at: await $.clock.now() }
+    const kept = asHandoffs(await $.store.get(HANDOFFS_KEY)).filter(doc => doc.path !== entry.path)
+    await $.store.set(HANDOFFS_KEY, [entry, ...kept].slice(0, MAX_KEPT))
+    return ran
+  })
+
+  // Re-arm the resume band for the next empty conversation (/clear keeps this session's state).
+  on('prompt.submit', async ($, e, next) => {
+    await update($, isResumeHidden, () => false)
+    await update($, isConversationEmpty, () => false)
+    return next(e)
+  })
+
+  // `claude --resume` / `--continue` start with turns already in the transcript.
+  on('session.start', async ($, e, next) => {
+    const isEmpty = (await $.session.turns()) === 0
+    await update($, isConversationEmpty, () => isEmpty)
+    return next(e)
+  })
+
+  // The band's drawing is cached; this write is what redraws it after /clear.
+  // turns() can't tell: the cleared transcript starts with the /clear command, a user turn.
+  on('session.end', async ($, e, next) => {
+    await update($, isConversationEmpty, () => e.reason === 'clear')
+    return next(e)
+  })
+
+  on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    const rest = await next(e)
+    // Only an empty conversation (a new session or after /clear) is starting from a handoff.
+    if (e.props.hasSurvey || (await read($, isResumeHidden)) || !(await read($, isConversationEmpty))) {
+      return rest
+    }
+
+    const cwd = await $.session.cwd()
+    const now = await $.clock.now()
+    const candidates = asHandoffs(await $.store.get(HANDOFFS_KEY)).filter(
+      doc => doc.cwd === cwd && !doc.isResumed && now - doc.at < MAX_AGE_MS,
+    )
+    const shown: Handoff[] = []
+    for (const doc of candidates) {
+      if (shown.length === MAX_SHOWN) break
+      // The OS clears $TMPDIR on its own schedule; skip docs that are gone.
+      if (await $.fs.exists(doc.path)) shown.push(doc)
+    }
+    if (shown.length === 0) {
+      return rest
+    }
+
+    const { Box, Button, Text } = $.ui.resolve(e)
+    const frame =
+      e.surface === 'desktop'
+        ? ({ rowGap: 1, paddingX: 1, paddingY: 1 } as const)
+        : ({ borderStyle: 'round', borderColor: 'suggestion', paddingX: 1 } as const)
+
+    const resume = async (doc: Handoff) => {
+      const all = asHandoffs(await $.store.get(HANDOFFS_KEY))
+      await $.store.set(HANDOFFS_KEY, all.map(x => (x.path === doc.path ? { ...x, isResumed: true } : x)))
+      await update($, isResumeHidden, () => true)
+      // Trailing space: the user usually adds what to do next after the path.
+      await $.prompt.fill({ text: `${doc.path} ` })
+    }
+
+    return (
+      <Box flexDirection="column">
+        {rest}
+        <Box flexDirection="column" {...frame}>
+          <Box justifyContent="space-between" alignItems="center" columnGap={2}>
+            <Text color="suggestion" bold>
+              ↻ Resume from a handoff
+            </Text>
+            <Button key="resume-hide" label="Hide" onPress={() => update($, isResumeHidden, () => true)} />
+          </Box>
+          {shown.map((doc, i) => (
+            <Box key={doc.path} justifyContent="space-between" alignItems="center" columnGap={2}>
+              <Text>
+                {basename(doc.path)} <Text dimColor>· {formatAge(now - doc.at)}</Text>
+              </Text>
+              <Button key={`resume-${i}`} variant={i === 0 ? 'primary' : undefined} label="Resume" onPress={() => resume(doc)} />
+            </Box>
+          ))}
+        </Box>
+      </Box>
+    )
+  })
+
   on('session.measure', async ($, e, next) => {
     const current = e.context.tokens ?? null
     await update($, tokens, () => current)
