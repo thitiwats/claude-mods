@@ -18,9 +18,12 @@ const HOUR = 60 * 60 * 1000
 const DAY = 24 * HOUR
 
 // The world a fresh session in /w/app sees: an empty conversation, every file present, Write succeeding.
-const world = (on: On, opts: { cwd?: string; turns?: number; isPresent?: boolean; store?: Record<string, unknown> } = {}) => {
+const world = (
+  on: On,
+  opts: { cwd?: string; turns?: number; isPresent?: boolean; store?: Record<string, unknown>; env?: Record<string, string> } = {},
+) => {
   mock.store(on, opts.store)
-  mock.env(on, { TMPDIR, HOME })
+  mock.env(on, opts.env ?? { TMPDIR, HOME })
   on('ui.render', () => ({ type: 'Box', props: { key: 'engine' }, children: [] }))
   on('session.cwd', () => ({ value: opts.cwd ?? '/w/app' }))
   on('session.turns', () => ({ value: opts.turns ?? 0 }))
@@ -171,5 +174,37 @@ for (const surface of ['terminal', 'desktop'] as const) {
 
     await $.session.end({ reason: 'clear' } as never)
     expect(await ui.find({ key: 'resume-0' })).toBeDefined()
+  })
+
+  // Windows sets no TMPDIR or HOME, and its paths use backslashes and ignore case.
+  const WIN_ENV = { TEMP: 'C:\\Users\\me\\AppData\\Local\\Temp', USERPROFILE: 'C:\\Users\\me' }
+  const WIN_DOC = 'C:\\Users\\me\\AppData\\Local\\Temp\\handoff-erp.md'
+
+  test(`${surface}: on Windows, a handoff saved to %TEMP% is offered in its project`, async ($, on) => {
+    world(on, { cwd: 'C:\\Users\\me\\app', env: WIN_ENV })
+    await $.tool.call({ tool: 'Write', file_path: WIN_DOC, content: '' })
+    const ui = await mount($)
+    expect(await ui.find({ key: 'resume-0' })).toBeDefined()
+    expect(JSON.stringify(await ui.drawn())).toContain('Temp/handoff-erp.md')
+  })
+
+  test(`${surface}: on Windows, a handoff from a subfolder is offered whatever the path's case`, async ($, on) => {
+    world(on, { cwd: 'c:\\users\\me\\app', env: WIN_ENV, store: { handoffs: [{ path: WIN_DOC, cwd: 'C:\\Users\\me\\app\\web', at: 100 * DAY }] } })
+    expect(await (await mount($)).find({ key: 'resume-0' })).toBeDefined()
+  })
+
+  test(`${surface}: on Windows, a handoff written in the user folder or a drive root is not offered in a project`, async ($, on) => {
+    const handoffs = [
+      { path: WIN_DOC, cwd: 'C:\\Users\\me', at: 100 * DAY },
+      { path: 'C:\\Users\\me\\AppData\\Local\\Temp\\handoff-b.md', cwd: 'C:\\', at: 100 * DAY },
+    ]
+    world(on, { cwd: 'C:\\Users\\me\\app', env: WIN_ENV, store: { handoffs } })
+    expect(await (await mount($)).find({ key: 'resume-0' })).toBeUndefined()
+  })
+
+  test(`${surface}: on Windows, a handoff Claude read with forward slashes is not offered again`, async ($, on) => {
+    world(on, { cwd: 'C:\\Users\\me\\app', env: WIN_ENV, store: { handoffs: [{ path: WIN_DOC, cwd: 'C:\\Users\\me\\app', at: 100 * DAY }] } })
+    await $.tool.call({ tool: 'Read', file_path: 'C:/Users/me/AppData/Local/Temp/handoff-erp.md' })
+    expect(await (await mount($)).find({ key: 'resume-0' })).toBeUndefined()
   })
 }

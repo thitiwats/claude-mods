@@ -15,20 +15,34 @@ const MAX_KEPT = 20
 const MAX_SHOWN = 3
 const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
 
-// /handoff saves to $TMPDIR (else /tmp); macOS resolves /tmp through /private/tmp.
+// Windows paths use backslashes and ignore case; compare every path in one form.
+const normalize = (path: string) => {
+  const slashed = path.replace(/\\/g, '/')
+  return /^[a-z]:\//i.test(slashed) ? slashed.toLowerCase() : slashed
+}
+
+const withSlash = (folder: string) => (folder.endsWith('/') ? folder : `${folder}/`)
+
+// /handoff saves to $TMPDIR (else /tmp); macOS resolves /tmp through /private/tmp; Windows sets %TEMP% and %TMP%.
 const TMP_ROOTS = ['/tmp/', '/private/tmp/']
 
-const isHandoffDoc = (path: string, tmpdir: string | undefined) =>
-  /handoff/i.test(path) &&
-  path.endsWith('.md') &&
-  [...TMP_ROOTS, ...(tmpdir ? [tmpdir.endsWith('/') ? tmpdir : `${tmpdir}/`] : [])].some(root => path.startsWith(root))
+const isHandoffDoc = (path: string, tmpdirs: (string | undefined)[]) => {
+  const doc = normalize(path)
+  const roots = [...TMP_ROOTS, ...tmpdirs.filter(dir => dir !== undefined && dir !== '').map(dir => withSlash(normalize(dir)))]
+  return /handoff/i.test(doc) && doc.endsWith('.md') && roots.some(root => doc.startsWith(root))
+}
 
-const isUnder = (path: string, folder: string) => path.startsWith(folder.endsWith('/') ? folder : `${folder}/`)
+const isUnder = (path: string, folder: string) => normalize(path).startsWith(withSlash(normalize(folder)))
 
-// A doc written in a subfolder of this project, or above it, still belongs here; home and / hold every project, so they never count.
+// A doc written in a subfolder of this project, or above it, still belongs here; home, / and a drive root hold every project, so they never count.
 const isNearby = (docCwd: string, cwd: string, home: string | undefined) => {
-  const isRoot = (folder: string) => folder === '/' || folder === home
-  return docCwd === cwd || (isUnder(cwd, docCwd) && !isRoot(docCwd)) || (isUnder(docCwd, cwd) && !isRoot(cwd))
+  const isRoot = (folder: string) =>
+    /^(?:[a-z]:)?\/?$/.test(normalize(folder)) || (home !== undefined && normalize(folder) === normalize(home))
+  return (
+    normalize(docCwd) === normalize(cwd) ||
+    (isUnder(cwd, docCwd) && !isRoot(docCwd)) ||
+    (isUnder(docCwd, cwd) && !isRoot(cwd))
+  )
 }
 
 const asHandoffs = (value: unknown) => (Array.isArray(value) ? (value as Handoff[]) : [])
@@ -46,7 +60,7 @@ const formatAge = (ms: number) => {
   return hours < 48 ? `${hours}h ago` : `${Math.round(hours / 24)}d ago`
 }
 
-const basename = (path: string) => path.split('/').filter(Boolean).slice(-2).join('/')
+const basename = (path: string) => path.split(/[\\/]/).filter(Boolean).slice(-2).join('/')
 
 // Installs /handoff from skills.sh when it is missing: `universal` keeps the files in ~/.agents/skills and symlinks Claude Code's copy to them.
 const INSTALL_COMMAND = 'npx -y skills add mattpocock/skills -s handoff -g -a universal claude-code -y'
@@ -106,11 +120,12 @@ export const register: Register = (on, options) => {
   // Remember each handoff doc this session writes, so the next session in this cwd can offer it.
   on('tool.call', { tool: 'Write' }, async ($, e, next) => {
     const ran = await next(e)
-    if (ran.deny !== undefined || ran.isError === true || !isHandoffDoc(e.file_path, await $.env.get('TMPDIR'))) {
+    const tmpdirs = await Promise.all([$.env.get('TMPDIR'), $.env.get('TEMP'), $.env.get('TMP')])
+    if (ran.deny !== undefined || ran.isError === true || !isHandoffDoc(e.file_path, tmpdirs)) {
       return ran
     }
     const entry: Handoff = { path: e.file_path, cwd: await $.session.cwd(), at: await $.clock.now() }
-    const kept = asHandoffs(await $.store.get(HANDOFFS_KEY)).filter(doc => doc.path !== entry.path)
+    const kept = asHandoffs(await $.store.get(HANDOFFS_KEY)).filter(doc => normalize(doc.path) !== normalize(entry.path))
     await $.store.set(HANDOFFS_KEY, [entry, ...kept].slice(0, MAX_KEPT))
     return ran
   })
@@ -119,7 +134,7 @@ export const register: Register = (on, options) => {
   on('tool.call', { tool: 'Read' }, async ($, e, next) => {
     const ran = await next(e)
     if (ran.deny === undefined && ran.isError !== true) {
-      const marked = markResumed(asHandoffs(await $.store.get(HANDOFFS_KEY)), path => path === e.file_path)
+      const marked = markResumed(asHandoffs(await $.store.get(HANDOFFS_KEY)), path => normalize(path) === normalize(e.file_path))
       if (marked) await $.store.set(HANDOFFS_KEY, marked)
     }
     return ran
@@ -158,7 +173,7 @@ export const register: Register = (on, options) => {
 
     const cwd = await $.session.cwd()
     const now = await $.clock.now()
-    const home = await $.env.get('HOME')
+    const home = (await $.env.get('HOME')) ?? (await $.env.get('USERPROFILE'))
     const candidates = asHandoffs(await $.store.get(HANDOFFS_KEY)).filter(
       doc => isNearby(doc.cwd, cwd, home) && !doc.isResumed && now - doc.at < MAX_AGE_MS,
     )
