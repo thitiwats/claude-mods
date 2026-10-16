@@ -48,12 +48,12 @@ const forks = (on: On, seen: { asked: string[] }, replies: string[]) => {
 
 for (const surface of ['terminal', 'desktop'] as const) {
   const mount = ($: Engine) => $.ui.mount({ plugin: 'prompt-sharpen', surface, component: 'Pane', requestId: 'prompt-sharpen', props: PROPS })
-  const run = ($: Engine, args: string) => $.command.run({ command: 'prompt-sharpen', args } as never)
+  const run = ($: Engine, args: string) => $.command.run({ command: 'prompt-sharpen:upgrade', args } as never)
 
   test(`${surface}: no prompt given shows how to use the command`, async ($, on) => {
     const seen = world(on)
     const ran = await run($, '  ')
-    expect(ran.text).toContain('Usage: /prompt-sharpen <prompt>')
+    expect(ran.text).toContain('Usage: /prompt-sharpen:upgrade <prompt>')
     expect(seen.asked).toEqual([])
   })
 

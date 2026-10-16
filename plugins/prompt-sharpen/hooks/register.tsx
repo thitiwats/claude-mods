@@ -4,7 +4,9 @@ import type { EngineInterface, Register, RenderChildren } from 'claude-code'
 import type { Answer, Ask, Question, Rewrite, Upgrade } from '../types'
 
 const PANE = 'prompt-sharpen'
-const USAGE = 'Usage: /prompt-sharpen <prompt>'
+// Declared in commands/upgrade.md, not registered at session.start: desktop reads its command menu with hooks disabled.
+const COMMAND = 'prompt-sharpen:upgrade'
+const USAGE = `Usage: /${COMMAND} <prompt>`
 
 const MAX_QUESTIONS = 3
 const MAX_OPTIONS = 4
@@ -152,16 +154,7 @@ const finish = async ($: EngineInterface) => {
 }
 
 export const register: Register = on => {
-  on('session.start', async ($, e, next) => {
-    await $.command.register({
-      name: 'prompt-sharpen',
-      description: 'Ask a few questions, then rewrite a prompt clearer and more complete with the same intent',
-      argumentHint: '<prompt>',
-    })
-    return next(e)
-  })
-
-  on('command.run', { command: 'prompt-sharpen' }, async ($, e) => {
+  on('command.run', { command: COMMAND }, async ($, e) => {
     const original = e.args.trim()
     if (!original) return { text: USAGE }
 

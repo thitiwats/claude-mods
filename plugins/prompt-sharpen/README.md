@@ -1,6 +1,6 @@
 # prompt-sharpen
 
-`/prompt-sharpen <prompt>` opens a pane that walks your prompt through three steps: **Questions**, **Rewrite**, **Review**.
+`/prompt-sharpen:upgrade <prompt>` opens a pane that walks your prompt through three steps: **Questions**, **Rewrite**, **Review**.
 
 ## Questions
 
