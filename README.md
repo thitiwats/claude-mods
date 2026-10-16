@@ -9,6 +9,8 @@ Claude Code mods, published as a plugin marketplace.
 | [handoff-nudge](plugins/handoff-nudge) | Once the context passes the **Nudge threshold** (200k tokens by default; 100k–500k in `/config`), shows a band above the prompt with a **Suggest handoff** button that fills `/handoff <focus>` into the prompt. If `/handoff` is missing, offers to install it. In a new or cleared conversation, a **Resume from a handoff** band lists this project's handoff docs from the last week (terminal only). |
 | [prompt-sharpen](plugins/prompt-sharpen) | `/prompt-sharpen <prompt>` opens a pane that asks up to three multiple-choice questions about what your prompt leaves open, then rewrites it clearer with the same intent. Review the result, then **Run it**, **Edit**, **Copy**, **Send original**, or **Cancel**. Anything still unknown stays a `[placeholder]`. |
 
+Both mods run on macOS, Linux, and Windows.
+
 ### handoff-nudge
 
 ![handoff-nudge band](plugins/handoff-nudge/docs/handoff-band.svg)

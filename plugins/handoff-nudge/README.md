@@ -20,6 +20,7 @@ In a new or cleared conversation, a **Resume from a handoff** band lists up to t
 
 - **Resume** fills the doc's path into the prompt so you can add what to do next.
 - A doc stops being offered once you send a prompt containing its path or Claude reads it.
+- Works on macOS, Linux, and Windows: it looks for docs in `$TMPDIR` or `/tmp`, and on Windows in `%TEMP%` or `%TMP%`, where your user folder (`%USERPROFILE%`) and drive roots such as `C:\` count like home and `/`.
 - Terminal only: the desktop app starts Claude Code with the first message, so a new conversation there is never empty when the band could draw.
 
 ## Settings
