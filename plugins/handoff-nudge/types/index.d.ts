@@ -18,7 +18,7 @@ declare module 'claude-code' {
       window: number
       isHidden: boolean
       suggestion: Suggestion
-      hasHandoff: boolean
+      handoffCommand: string | null
       isResumeHidden: boolean
       isConversationEmpty: boolean
     }

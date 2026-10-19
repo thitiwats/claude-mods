@@ -111,7 +111,8 @@ const threshold = atom({ plugin: 'handoff-nudge', key: 'threshold' } as const, 0
 const contextWindow = atom({ plugin: 'handoff-nudge', key: 'window' } as const, 0)
 const isHidden = atom({ plugin: 'handoff-nudge', key: 'isHidden' } as const, false)
 const suggestion = atom({ plugin: 'handoff-nudge', key: 'suggestion' } as const, IDLE)
-const hasHandoff = atom({ plugin: 'handoff-nudge', key: 'hasHandoff' } as const, true)
+// The installed /handoff skill's command name; a plugin's copy is namespaced, e.g. `skills:handoff`. null when missing.
+const handoffCommand = atom({ plugin: 'handoff-nudge', key: 'handoffCommand' } as const, 'handoff' as string | null)
 const isResumeHidden = atom({ plugin: 'handoff-nudge', key: 'isResumeHidden' } as const, false)
 const isConversationEmpty = atom({ plugin: 'handoff-nudge', key: 'isConversationEmpty' } as const, true)
 
@@ -236,8 +237,8 @@ export const register: Register = (on, options) => {
       await update($, isHidden, () => false)
       await update($, suggestion, () => IDLE)
     } else {
-      const found = (await $.command.list()).some(c => c.name === 'handoff')
-      await update($, hasHandoff, () => found)
+      const found = (await $.command.list()).find(c => c.name === 'handoff' || c.name.endsWith(':handoff'))
+      await update($, handoffCommand, () => found?.name ?? null)
     }
 
     return next(e)
@@ -257,7 +258,7 @@ export const register: Register = (on, options) => {
     const { Box, Button, Text } = $.ui.resolve(e)
     const window = await read($, contextWindow)
     const s = await read($, suggestion)
-    const isMissing = !(await read($, hasHandoff))
+    const command = await read($, handoffCommand)
     const percent = window > 0 ? Math.round((current / window) * 100) : undefined
     const { filled, empty } = bar(current, window)
 
@@ -303,7 +304,7 @@ export const register: Register = (on, options) => {
 
     const hide = <Button key="hide" label="Hide" onPress={() => update($, isHidden, () => true)} />
 
-    if (isMissing) {
+    if (command === null) {
       return card(
         <Text dimColor>/handoff skill is not installed.</Text>,
         [<Button key="install" label="Install /handoff" onPress={press => $.prompt.fill({ text: installPrompt(press.surface) })} />, hide],
@@ -319,7 +320,7 @@ export const register: Register = (on, options) => {
         : { status: 'failed', reason: reply.isAnswered ? 'empty reply' : reply.reason }
       await update($, suggestion, () => result)
       if (focus) {
-        await $.prompt.fill({ text: `/handoff ${focus}` })
+        await $.prompt.fill({ text: `/${command} ${focus}` })
       }
     }
 

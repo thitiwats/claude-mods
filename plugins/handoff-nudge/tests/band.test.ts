@@ -115,6 +115,26 @@ for (const surface of ['terminal', 'desktop'] as const) {
     expect(JSON.stringify(await after.drawn())).not.toContain('Finish the mod install')
   })
 
+  test(`${surface}: a plugin's /handoff skill counts as installed and fills under its plugin name`, async ($, on) => {
+    const filled: string[] = []
+    on('session.measure', (_$, e) => ({ changed: e.changed }))
+    on('session.usage', usage())
+    on('ui.render', () => ({ type: 'Box', props: { key: 'engine' }, children: [] }))
+    mock.store(on)
+    on('prompt.submit', (_$, e) => ({ text: e.text }))
+    on('command.list', () => ({ value: [{ ...HANDOFF, name: 'skills:handoff', source: 'plugin' as const }] }))
+    on('model.fork', () => ({ value: { isAnswered: true as const, text: 'Finish the mod install', usage: USAGE } }))
+    on('prompt.fill', (_$, e) => (filled.push(e.text), { isFilled: true }))
+
+    await $.prompt.submit({ text: 'hi' } as never)
+    await $.session.measure(measure(210_000))
+    const ui = await mount($)
+    expect(await ui.find({ key: 'install' })).toBeUndefined()
+    await ui.press({ key: 'suggest' })
+
+    expect(filled).toEqual(['/skills:handoff Finish the mod install'])
+  })
+
   test(`${surface}: a 300k nudge threshold stays hidden at 250k and shows past 300k`, { options: { nudgeThreshold: '300k' } }, async ($, on) => {
     on('session.measure', (_$, e) => ({ changed: e.changed }))
     on('session.usage', usage())
