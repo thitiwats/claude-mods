@@ -113,8 +113,8 @@ const IMAGE_REF = /\[Image #\d+\]/g
 
 const imageWarning = (count: number, original: string) =>
   isThai(original)
-    ? `! มี ${count} รูปในพรอมต์: รูปจะไม่ถูกส่งไปด้วย แนบรูปใหม่หลัง Run`
-    : `! Has ${count} image in the prompt: it is not sent along, attach it again after Run`
+    ? `! มี ${count} รูปในพรอมต์: รูปจะไม่ถูกส่งไปด้วย กด Edit แล้วแนบรูปใหม่ก่อนส่ง`
+    : `! Has ${count} image in the prompt: it is not sent along, use Edit and attach it again before sending`
 
 // The fork sees this conversation; a new or cleared one has nothing to fork, so ask the same model without it.
 const ask = async ($: EngineInterface, prompt: string) => {
@@ -305,18 +305,20 @@ export const register: Register = on => {
           {images.length > 0 && <Text color="warning">{imageWarning(images.length, u.original)}</Text>}
           {original}
           <Box columnGap={1} flexWrap="wrap">
-            <Button
-              key="run"
-              variant={placeholders.length > 0 ? undefined : 'primary'}
-              label={placeholders.length > 0 ? '▶ Run anyway' : '▶ Run it'}
-              onPress={async () => {
-                await finish($)
-                await $.prompt.submit({ text, asUser: true })
-              }}
-            />
+            {images.length === 0 && (
+              <Button
+                key="run"
+                variant={placeholders.length > 0 ? undefined : 'primary'}
+                label={placeholders.length > 0 ? '▶ Run anyway' : '▶ Run it'}
+                onPress={async () => {
+                  await finish($)
+                  await $.prompt.submit({ text, asUser: true })
+                }}
+              />
+            )}
             <Button
               key="edit"
-              variant={placeholders.length > 0 ? 'primary' : undefined}
+              variant={placeholders.length > 0 || images.length > 0 ? 'primary' : undefined}
               label="Edit"
               onPress={async () => {
                 await finish($)
@@ -331,7 +333,7 @@ export const register: Register = on => {
                 $.ui.toast(copied.isCopied ? 'Copied' : `Could not copy: ${copied.reason}`)
               }}
             />
-            {sendOriginal}
+            {images.length === 0 && sendOriginal}
             {cancel}
           </Box>
         </Box>

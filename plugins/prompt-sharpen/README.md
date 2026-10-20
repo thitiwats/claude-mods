@@ -24,7 +24,7 @@ Shows the sharpened prompt first, then what was added, with your original as a s
 
 | Action | What it does |
 | --- | --- |
-| **Run it** | Sends it (with a warning and **Run anyway** while a `[placeholder]` is left, and a warning when it has an `[Image #N]`: the image itself is not sent, so attach it again after Run) |
+| **Run it** | Sends it (with a warning and **Run anyway** while a `[placeholder]` is left). Hidden, with **Send original**, while the prompt has an `[Image #N]`: the image is not sent, so use **Edit** and attach it again |
 | **Edit** | Puts it in the prompt to change first |
 | **Copy** | Copies it |
 | **Send original** | Sends what you typed |

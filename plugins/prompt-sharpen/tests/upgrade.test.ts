@@ -121,8 +121,12 @@ for (const surface of ['terminal', 'desktop'] as const) {
     forks(on, seen, [JSON.stringify({ questions: [] }), withImage])
     await run($, 'Make the UI match [Image #1]')
 
-    const review = JSON.stringify(await (await mount($)).drawn())
+    const pane = await mount($)
+    const review = JSON.stringify(await pane.drawn())
     expect(review).toContain('Has 1 image in the prompt')
+    expect(await pane.find({ key: 'run' })).toBeUndefined()
+    expect(await pane.find({ key: 'original' })).toBeUndefined()
+    expect(await pane.find({ key: 'edit' })).toBeDefined()
     expect(review).not.toContain('[placeholder]')
     expect(seen.asked[1]).toContain('Keep each [Image #N] reference exactly as written')
   })
