@@ -14,6 +14,7 @@ Rewrites the prompt clearer and more complete with the same intent, keeping ever
 
 - An answer you left on its recommended option is written as an assumption.
 - Anything still unknown stays a `[placeholder]`.
+- A pasted image shows up as `[Image #N]`; the rewrite keeps it as written and never guesses what it shows.
 
 ## Review
 
@@ -23,7 +24,7 @@ Shows the sharpened prompt first, then what was added, with your original as a s
 
 | Action | What it does |
 | --- | --- |
-| **Run it** | Sends it (with a warning and **Run anyway** while a `[placeholder]` is left) |
+| **Run it** | Sends it (with a warning and **Run anyway** while a `[placeholder]` is left, and a warning when it has an `[Image #N]`: the image itself is not sent, so attach it again after Run) |
 | **Edit** | Puts it in the prompt to change first |
 | **Copy** | Copies it |
 | **Send original** | Sends what you typed |

@@ -115,6 +115,29 @@ for (const surface of ['terminal', 'desktop'] as const) {
     expect(review).not.toContain('Still has')
   })
 
+  test(`${surface}: an [Image #N] in the prompt warns that the image is not sent, without counting as a [placeholder]`, async ($, on) => {
+    const seen = world(on)
+    const withImage = '```json\n' + JSON.stringify({ prompt: 'Make the UI match [Image #1].', added: [] }) + '\n```'
+    forks(on, seen, [JSON.stringify({ questions: [] }), withImage])
+    await run($, 'Make the UI match [Image #1]')
+
+    const review = JSON.stringify(await (await mount($)).drawn())
+    expect(review).toContain('Has 1 image in the prompt')
+    expect(review).not.toContain('[placeholder]')
+    expect(seen.asked[1]).toContain('Keep each [Image #N] reference exactly as written')
+  })
+
+  test(`${surface}: a Thai prompt gets the image warning in Thai`, async ($, on) => {
+    const seen = world(on)
+    const withImage = '```json\n' + JSON.stringify({ prompt: 'แก้ UI ให้เหมือน [Image #1]', added: [] }) + '\n```'
+    forks(on, seen, [JSON.stringify({ questions: [] }), withImage])
+    await run($, 'แก้ UI ให้เหมือนรูปนี้ [Image #1]')
+
+    const review = JSON.stringify(await (await mount($)).drawn())
+    expect(review).toContain('มี 1 รูปในพรอมต์')
+    expect(review).not.toContain('Has 1 image')
+  })
+
   test(`${surface}: Other takes typed text and Skip leaves the question out`, async ($, on) => {
     const seen = world(on)
     forks(on, seen, [QUESTIONS, REWRITE])

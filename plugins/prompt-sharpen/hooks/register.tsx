@@ -46,6 +46,7 @@ const rewritePrompt = (original: string, answered: string) =>
     'Never add work the user did not ask for (tests, docs, secrets, extra checks) or implementation choices (resources, libraries, outputs); if one seems worth suggesting, write it as an assumption.',
     'Answers marked "unconfirmed" are your own guesses, which the user did not pick: write each as an assumption the user can change, not as a requirement.',
     'Never invent facts: write anything still unknown as a [placeholder].',
+    'Keep each [Image #N] reference exactly as written, in a place that still reads naturally: it stands for a picture you cannot see, so never describe it or guess what it shows.',
     LANGUAGE,
     'Keep it under 300 words, or 1.5 times the original\'s length when that is longer; shorter is fine when the task is simple.',
     'Also list each detail the rewrite states that the original did not, including those inside examples and steps, a few words each, in the same language.',
@@ -106,6 +107,14 @@ const placeholderWarning = (count: number, original: string) =>
   isThai(original)
     ? `! ยังเหลือ ${count} [placeholder] ที่ต้องเติม: กด Edit ก่อน หรือ Run anyway`
     : `! Still has ${count} [placeholder] to fill: use Edit first, or Run anyway`
+
+// The picture itself is not sent along: a plugin's prompt carries text only.
+const IMAGE_REF = /\[Image #\d+\]/g
+
+const imageWarning = (count: number, original: string) =>
+  isThai(original)
+    ? `! มี ${count} รูปในพรอมต์: รูปจะไม่ถูกส่งไปด้วย แนบรูปใหม่หลัง Run`
+    : `! Has ${count} image in the prompt: it is not sent along, attach it again after Run`
 
 // The fork sees this conversation; a new or cleared one has nothing to fork, so ask the same model without it.
 const ask = async ($: EngineInterface, prompt: string) => {
@@ -271,7 +280,8 @@ export const register: Register = on => {
       body = failure(u.rewrite.reason, () => rewrite($, u.id))
     } else if (u.rewrite.status === 'ready') {
       const { text, added } = u.rewrite.value
-      const placeholders = text.match(/\[[^\]\n]+\]/g) ?? []
+      const images = text.match(IMAGE_REF) ?? []
+      const placeholders = (text.match(/\[[^\]\n]+\]/g) ?? []).filter(m => !/^\[Image #\d+\]$/.test(m))
       body = (
         <Box flexDirection="column" rowGap={1}>
           {box('Upgraded prompt', text)}
@@ -292,6 +302,7 @@ export const register: Register = on => {
           {placeholders.length > 0 && (
             <Text color="warning">{placeholderWarning(placeholders.length, u.original)}</Text>
           )}
+          {images.length > 0 && <Text color="warning">{imageWarning(images.length, u.original)}</Text>}
           {original}
           <Box columnGap={1} flexWrap="wrap">
             <Button
