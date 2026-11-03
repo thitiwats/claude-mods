@@ -180,3 +180,21 @@ for (const surface of ['terminal', 'desktop'] as const) {
     expect(await (await mount($)).find({ key: 'suggest' })).toBeDefined()
   })
 }
+
+test('terminal: stays hidden while a measure under the threshold is still working out the threshold', async ($, on) => {
+  const mount = () => $.ui.mount({ plugin: 'handoff-nudge', surface: 'terminal', component: 'AbovePrompt', props: PROPS })
+  let drawnMidMeasure: unknown = 'not drawn'
+  on('session.measure', (_$, e) => ({ changed: e.changed }))
+  on('session.usage', async () => {
+    drawnMidMeasure = await (await mount()).find({ key: 'suggest' })
+    return usage()()
+  })
+  on('ui.render', () => ({ type: 'Box', props: { key: 'engine' }, children: [] }))
+  mock.store(on)
+  on('prompt.submit', (_$, e) => ({ text: e.text }))
+  on('command.list', () => ({ value: [HANDOFF] }))
+
+  await $.prompt.submit({ text: 'hi' } as never)
+  await $.session.measure(measure(50_000))
+  expect(drawnMidMeasure).toBeUndefined()
+})

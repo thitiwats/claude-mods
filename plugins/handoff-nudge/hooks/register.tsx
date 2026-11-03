@@ -225,12 +225,13 @@ export const register: Register = (on, options) => {
 
   on('session.measure', async ($, e, next) => {
     const current = e.context.tokens ?? null
-    await update($, tokens, () => current)
-    await update($, contextWindow, () => e.context.window)
     // Only the breakdown says where auto-compaction runs; `summary` counts locally, sending nothing.
     const { context } = await $.session.usage({ breakdown: 'summary' })
     const at = effectiveThreshold(chosen, e.context.window, context.breakdown?.autoCompactThreshold)
+    // Threshold before tokens: a redraw between the writes must not compare new tokens to the unset threshold (0).
     await update($, threshold, () => at)
+    await update($, contextWindow, () => e.context.window)
+    await update($, tokens, () => current)
 
     // Re-arm the band once context drops back under the threshold (compact, /clear).
     if (current === null || current < at) {
